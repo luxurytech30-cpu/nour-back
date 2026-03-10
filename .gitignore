@@ -1,0 +1,78 @@
+# dependencies
+
+node_modules/
+.pnp
+.pnp.js
+
+# logs
+
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# runtime data
+
+pids
+*.pid
+*.seed
+*.pid.lock
+
+
+# next.js
+
+.next/
+out/
+
+# build folders
+
+build/
+dist/
+
+# cache
+
+.cache/
+.parcel-cache/
+
+# uploads
+
+uploads/
+tmp/
+
+# OS files
+
+.DS_Store
+Thumbs.db
+
+# IDE
+
+.vscode/
+.idea/
+
+# coverage
+
+coverage/
+
+# typescript
+
+*.tsbuildinfo
+
+# vercel
+
+.vercel
+
+# render
+
+.render
+
+# mongo local db
+
+data/
+mongo-data/
+
+# misc
+
+*.pem
+*.key
