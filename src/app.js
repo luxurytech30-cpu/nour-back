@@ -13,6 +13,7 @@ const courseRoutes = require("./routes/course.routes");
 const appointmentsRoutes = require("./routes/appointments");
 const barberScheduleRoutes = require("./routes/barberSchedule");
 const servicesRoutes = require("./routes/services.routes");
+const waitlistRoutes = require("./routes/waitlist");
 
 const app = express();
 
@@ -65,5 +66,6 @@ app.use("/api/barbers-schedule", barberScheduleRoutes);
 app.use("/api/appointments", appointmentsRoutes);
 app.use("/api/availability", require("./routes/availability.routes"));
 app.use("/api/services", servicesRoutes);
+app.use("/api/waitlist", waitlistRoutes);
 
 module.exports = app;

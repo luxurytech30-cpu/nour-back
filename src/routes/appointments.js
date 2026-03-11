@@ -146,15 +146,66 @@ router.get("/", requireAuth, async (req, res) => {
 // admin can also create manually
 router.post("/", async (req, res) => {
   try {
-    const { barberId, startAt, endAt, customerName, phone, service, notes } =
-      req.body;
+    const {
+      barberId,
+      startAt,
+      endAt,
+      customerName,
+      phone,
+      service,
+      notes,
+      customerId,
+      serviceId,
+      date,
+      time,
+    } = req.body;
 
-    if (!barberId || !startAt || !endAt || !customerName) {
+    let finalBarberId = barberId;
+    let finalStartAt = startAt;
+    let finalEndAt = endAt;
+    let finalCustomerName = customerName;
+    let finalPhone = phone || "";
+    let finalService = service || "";
+
+    // support new booking payload: barberId + date + time + customerId + serviceId
+    if (!finalStartAt && !finalEndAt && date && time && finalBarberId) {
+      const start = new Date(`${date}T${time}:00`);
+      if (Number.isNaN(start.getTime())) {
+        return res.status(400).json({ message: "Invalid date/time" });
+      }
+
+      const barber = await Barber.findById(finalBarberId).lean();
+      if (!barber) {
+        return res.status(404).json({ message: "Barber not found" });
+      }
+
+      const slotMinutes = Number(barber.slotMinutes || 30);
+
+      const end = new Date(start);
+      end.setMinutes(end.getMinutes() + slotMinutes);
+
+      finalStartAt = start;
+      finalEndAt = end;
+    }
+
+    if (!finalCustomerName && customerId) {
+      finalCustomerName = "לקוח";
+    }
+
+    if (!finalService && serviceId) {
+      const Service = require("../models/Service");
+      const serviceDoc = await Service.findById(serviceId).lean();
+      if (serviceDoc) {
+        finalService = serviceDoc.name || "";
+      }
+    }
+
+    if (!finalBarberId || !finalStartAt || !finalEndAt || !finalCustomerName) {
       return res.status(400).json({ message: "Missing fields" });
     }
 
-    const s = new Date(startAt);
-    const e = new Date(endAt);
+    const s = new Date(finalStartAt);
+    const e = new Date(finalEndAt);
 
     if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) {
       return res.status(400).json({ message: "Invalid date format" });
@@ -164,7 +215,11 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Invalid time range" });
     }
 
-    const scheduleCheck = await validateBarberScheduleOrFail(barberId, s, e);
+    const scheduleCheck = await validateBarberScheduleOrFail(
+      finalBarberId,
+      s,
+      e,
+    );
     if (!scheduleCheck.ok) {
       return res
         .status(scheduleCheck.status)
@@ -172,7 +227,7 @@ router.post("/", async (req, res) => {
     }
 
     const overlap = await findOverlap({
-      barberId,
+      barberId: finalBarberId,
       startAt: s,
       endAt: e,
     });
@@ -182,19 +237,19 @@ router.post("/", async (req, res) => {
     }
 
     const appointment = await Appointment.create({
-      barberId,
+      barberId: finalBarberId,
       startAt: s,
       endAt: e,
-      customerName: String(customerName).trim(),
-      phone: phone ? String(phone).trim() : "",
-      service: service ? String(service).trim() : "",
+      customerName: String(finalCustomerName).trim(),
+      phone: finalPhone ? String(finalPhone).trim() : "",
+      service: finalService ? String(finalService).trim() : "",
       notes: notes ? String(notes).trim() : "",
       status: "booked",
       manageToken: generateManageToken(),
       bookingCode: generateBookingCode(),
       clientCanEdit: true,
       clientEditCutoffMinutes: 120,
-      createdByUserId: req.session?.user?._id || null,
+      createdByUserId: req.session?.user?._id || customerId || null,
     });
 
     return res.status(201).json({
@@ -204,6 +259,7 @@ router.post("/", async (req, res) => {
       message: "Appointment booked successfully",
     });
   } catch (e) {
+    console.error("CREATE APPOINTMENT ERROR:", e);
     res.status(500).json({ message: e.message });
   }
 });

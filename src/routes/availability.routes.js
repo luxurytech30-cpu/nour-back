@@ -63,25 +63,23 @@ router.get("/:barberId", async (req, res) => {
   try {
     const { barberId } = req.params;
     const { date } = req.query;
-    if (!isDate(date))
+
+    if (!isDate(date)) {
       return res.status(400).json(fail("date must be YYYY-MM-DD"));
+    }
 
     const barber = await Barber.findById(barberId).lean();
     if (!barber) return res.status(404).json(fail("Barber not found"));
 
-    // ✅ use service duration if provided
-    const durationMin = Math.max(0, Number(req.query.durationMin || 0));
-    const slotMinutes = durationMin || Number(barber.slotMinutes || 30);
+    const slotMinutes = Number(barber.slotMinutes || 30);
 
-    // day of week 0..6 (Sunday=0)
     const dow = new Date(`${date}T00:00:00`).getDay();
     const dayKey = String(dow);
 
-    // apply override if exists
     const override = (barber.overrides || []).find((o) => o.date === date);
 
     if (override?.isClosed) {
-      return res.json(ok({ date, barberId, slots: [] }));
+      return res.json(ok({ date, barberId, slotMinutes, slots: [] }));
     }
 
     const hours = override?.hours?.length
@@ -99,7 +97,6 @@ router.get("/:barberId", async (req, res) => {
     const openRanges = rangesToMinutes(hours);
     const breakRanges = rangesToMinutes(breaks);
 
-    // booked appointments for that day
     const dayStart = new Date(`${date}T00:00:00`);
     const dayEnd = new Date(`${date}T23:59:59.999`);
 
@@ -121,6 +118,7 @@ router.get("/:barberId", async (req, res) => {
       ...breakRanges,
       ...bookedRanges,
     ]);
+
     const slots = makeSlots(freeRanges, slotMinutes);
 
     res.json(ok({ date, barberId, slotMinutes, slots }));

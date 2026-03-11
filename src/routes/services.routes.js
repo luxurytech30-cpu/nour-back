@@ -56,7 +56,7 @@ router.post("/admin", requireAdmin, async (req, res) => {
   try {
     const { name, price, durationMin } = req.body;
 
-    if (!name) {
+    if (!name || !String(name).trim()) {
       return res.status(400).json({ message: "name is required" });
     }
 
@@ -66,16 +66,16 @@ router.post("/admin", requireAdmin, async (req, res) => {
         .json({ message: "price and durationMin are required" });
     }
 
-    const generatedKey = String(name)
-      .trim()
+    const cleanName = String(name).trim();
+
+    const generatedKey = cleanName
       .toLowerCase()
       .replace(/\s+/g, "-")
-      .replace(/[^\w-]+/g, "");
+      .replace(/[^\w\u0590-\u05ff-]+/g, "");
 
     const created = await Service.create({
       key: generatedKey,
-      name: String(name).trim(),
-      nameHe: String(req.body.nameHe ?? "").trim(),
+      name: cleanName,
       price: Number(price),
       durationMin: Number(durationMin),
       isActive: req.body.isActive ?? true,
@@ -85,50 +85,48 @@ router.post("/admin", requireAdmin, async (req, res) => {
 
     res.status(201).json({ service: created });
   } catch (err) {
+    console.error("CREATE SERVICE ERROR:", err);
+
     if (String(err?.code) === "11000") {
       return res
         .status(409)
         .json({ message: "Service name/key already exists" });
     }
+
     res.status(500).json({ message: "Failed to create service" });
   }
 });
-
-router.patch("/admin/:id", requireAuth, requireAdmin, async (req, res) => {
+router.patch("/admin/:id", requireAdmin, async (req, res) => {
   try {
-    const allowed = [
-      "key",
-      "name",
-      "nameHe",
-      "price",
-      "durationMin",
-      "isActive",
-      "sortOrder",
-      "description",
-    ];
+    const { name, price, durationMin, isActive, sortOrder, description } =
+      req.body;
 
-    const updates = {};
-
-    for (const k of allowed) {
-      if (req.body[k] !== undefined) updates[k] = req.body[k];
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ message: "name is required" });
     }
 
-    if (updates.key !== undefined)
-      updates.key = String(updates.key).trim().toLowerCase();
-    if (updates.name !== undefined) updates.name = String(updates.name).trim();
-    if (updates.nameHe !== undefined)
-      updates.nameHe = String(updates.nameHe).trim();
-    if (updates.price !== undefined) updates.price = Number(updates.price);
-    if (updates.durationMin !== undefined)
-      updates.durationMin = Number(updates.durationMin);
-    if (updates.sortOrder !== undefined)
-      updates.sortOrder = Number(updates.sortOrder);
-    if (updates.description !== undefined)
-      updates.description = String(updates.description).trim();
+    const cleanName = String(name).trim();
 
-    const updated = await Service.findByIdAndUpdate(req.params.id, updates, {
-      new: true,
-    });
+    const generatedKey = cleanName
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^\w\u0590-\u05ff-]+/g, "");
+
+    const updated = await Service.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          key: generatedKey,
+          name: cleanName,
+          price: Number(price),
+          durationMin: Number(durationMin),
+          isActive: isActive ?? true,
+          sortOrder: Number(sortOrder ?? 0),
+          description: String(description ?? "").trim(),
+        },
+      },
+      { new: true },
+    );
 
     if (!updated) {
       return res.status(404).json({ message: "Service not found" });
@@ -136,10 +134,15 @@ router.patch("/admin/:id", requireAuth, requireAdmin, async (req, res) => {
 
     res.json({ service: updated });
   } catch (err) {
+    console.error("UPDATE SERVICE ERROR:", err);
+
     if (String(err?.code) === "11000") {
-      return res.status(409).json({ message: "Service key already exists" });
+      return res
+        .status(409)
+        .json({ message: "Service name/key already exists" });
     }
-    res.status(400).json({ message: "Failed to update service" });
+
+    res.status(500).json({ message: "Failed to update service" });
   }
 });
 
