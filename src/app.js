@@ -17,7 +17,7 @@ const servicesRoutes = require("./routes/services.routes");
 const app = express();
 
 const allowedOrigins = [
-  "https://epex-ruby.vercel.app/",
+  "https://epex-ruby.vercel.app",
   "http://localhost:8080",
   "http://localhost:8081",
 ];
