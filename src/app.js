@@ -21,6 +21,7 @@ const allowedOrigins = [
   "https://epex-ruby.vercel.app",
   "http://localhost:8080",
   "http://localhost:8081",
+  "https://apex-nine-mu.vercel.app",
 ];
 
 app.set("trust proxy", 1);
