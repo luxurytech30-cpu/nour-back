@@ -66,10 +66,16 @@ app.use(
       mongoUrl: process.env.MONGO_URI,
       touchAfter: 24 * 3600,
     }),
+    // cookie: {
+    //   httpOnly: true,
+    //   sameSite: "lax",
+    //   secure: false,
+    //   maxAge: 1000 * 60 * 60 * 24 * 7,
+    // },
     cookie: {
       httpOnly: true,
-      sameSite: "lax",
-      secure: false,
+      sameSite: "none",
+      secure: true,
       maxAge: 1000 * 60 * 60 * 24 * 7,
     },
   }),
