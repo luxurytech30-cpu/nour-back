@@ -2,7 +2,7 @@ const router = require("express").Router();
 const Product = require("../models/Product");
 const upload = require("../middleware/upload");
 const cloudinary = require("../config/cloudinary");
-const { requireAdmin } = require("../middleware/auth");
+const { requireAdmin } = require("../middleware/admin");
 
 // list
 router.get("/", async (req, res) => {

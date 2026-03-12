@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const Barber = require("../models/Barber");
-const { requireAdmin } = require("../middleware/auth");
+const { requireAdmin } = require("../middleware/admin");
 const upload = require("../middleware/upload"); // must export multer middleware
 const cloudinary = require("../config/cloudinary");
 const streamifier = require("streamifier");

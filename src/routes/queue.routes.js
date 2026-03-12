@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const Queue = require("../models/Queue");
-const { requireAdmin } = require("../middleware/auth");
+const { requireAdmin } = require("../middleware/admin");
 
 // create/get main queue (simple)
 router.get("/main", async (req, res) => {

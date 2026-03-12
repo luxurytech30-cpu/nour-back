@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const Barber = require("../models/Barber");
-const { requireAdmin } = require("../middleware/auth");
+const { requireAdmin } = require("../middleware/admin");
 
 // -------- helpers ----------
 const ok = (data) => ({ success: true, data });

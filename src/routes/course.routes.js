@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const Course = require("../models/Course");
-const { requireAdmin } = require("../middleware/auth");
+const { requireAdmin } = require("../middleware/admin");
 
 // list
 router.get("/", async (req, res) => {

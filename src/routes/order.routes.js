@@ -1,13 +1,18 @@
 const router = require("express").Router();
-const { requireAuth, requireAdmin } = require("../middleware/auth");
+const { requireAuth } = require("../middleware/auth");
+const { requireAdmin } = require("../middleware/admin");
+
 const Cart = require("../models/Cart");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 
 // create order from cart
 router.post("/", requireAuth, async (req, res) => {
-  const cart = await Cart.findOne({ user: req.session.user.id }).populate("items.product");
-  if (!cart || cart.items.length === 0) return res.status(400).json({ message: "Cart empty" });
+  const cart = await Cart.findOne({ user: req.user.id }).populate(
+    "items.product",
+  );
+  if (!cart || cart.items.length === 0)
+    return res.status(400).json({ message: "Cart empty" });
 
   // snapshot + total + reduce stock
   let total = 0;
@@ -15,8 +20,12 @@ router.post("/", requireAuth, async (req, res) => {
 
   for (const it of cart.items) {
     const p = it.product;
-    if (!p || !p.isActive) return res.status(400).json({ message: "Product not available" });
-    if (p.stock < it.qty) return res.status(400).json({ message: `Not enough stock for ${p.name}` });
+    if (!p || !p.isActive)
+      return res.status(400).json({ message: "Product not available" });
+    if (p.stock < it.qty)
+      return res
+        .status(400)
+        .json({ message: `Not enough stock for ${p.name}` });
 
     total += p.price * it.qty;
     items.push({
@@ -30,11 +39,13 @@ router.post("/", requireAuth, async (req, res) => {
 
   // reduce stock
   for (const it of cart.items) {
-    await Product.findByIdAndUpdate(it.product._id, { $inc: { stock: -it.qty } });
+    await Product.findByIdAndUpdate(it.product._id, {
+      $inc: { stock: -it.qty },
+    });
   }
 
   const order = await Order.create({
-    user: req.session.user.id,
+    user: req.user.id,
     items,
     total,
     status: "pending",
@@ -49,13 +60,17 @@ router.post("/", requireAuth, async (req, res) => {
 
 // my orders
 router.get("/me", requireAuth, async (req, res) => {
-  const orders = await Order.find({ user: req.session.user.id }).sort({ createdAt: -1 });
+  const orders = await Order.find({ user: req.user.id }).sort({
+    createdAt: -1,
+  });
   res.json(orders);
 });
 
 // admin: list all orders
 router.get("/", requireAdmin, async (req, res) => {
-  const orders = await Order.find().populate("user", "username phone").sort({ createdAt: -1 });
+  const orders = await Order.find()
+    .populate("user", "username phone")
+    .sort({ createdAt: -1 });
   res.json(orders);
 });
 
@@ -65,7 +80,11 @@ router.patch("/:id/status", requireAdmin, async (req, res) => {
   const ok = ["pending", "paid", "cancelled"].includes(status);
   if (!ok) return res.status(400).json({ message: "Invalid status" });
 
-  const order = await Order.findByIdAndUpdate(req.params.id, { $set: { status } }, { new: true });
+  const order = await Order.findByIdAndUpdate(
+    req.params.id,
+    { $set: { status } },
+    { new: true },
+  );
   if (!order) return res.status(404).json({ message: "Not found" });
   res.json(order);
 });

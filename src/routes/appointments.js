@@ -1062,7 +1062,7 @@ router.get("/", requireAuth, async (req, res) => {
       if (!req.user?._id) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      q.createdByUserId = req.session.user._id;
+      q.createdByUserId = req.user._id;
     }
 
     const list = await Appointment.find(q)

@@ -1,7 +1,6 @@
 const express = require("express");
 const Service = require("../models/Service");
 const { requireAuth } = require("../middleware/auth");
-
 const router = express.Router();
 
 function requireAdmin(req, res, next) {
@@ -9,7 +8,7 @@ function requireAdmin(req, res, next) {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
-  if (req.session.user.role !== "admin") {
+  if (req.user.role !== "admin") {
     return res.status(403).json({ message: "Admin only" });
   }
 
