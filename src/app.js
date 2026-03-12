@@ -14,6 +14,7 @@ const appointmentsRoutes = require("./routes/appointments");
 const barberScheduleRoutes = require("./routes/barberSchedule");
 const servicesRoutes = require("./routes/services.routes");
 const waitlistRoutes = require("./routes/waitlist");
+const verfyRoutes = require("./routes/phoneVerification");
 
 const app = express();
 
@@ -68,5 +69,5 @@ app.use("/api/appointments", appointmentsRoutes);
 app.use("/api/availability", require("./routes/availability.routes"));
 app.use("/api/services", servicesRoutes);
 app.use("/api/waitlist", waitlistRoutes);
-
+app.use("/api/verify", verfyRoutes);
 module.exports = app;

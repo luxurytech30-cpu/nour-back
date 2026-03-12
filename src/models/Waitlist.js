@@ -6,7 +6,6 @@ const waitlistSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Barber",
       required: true,
-      index: true,
     },
     serviceId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -16,59 +15,50 @@ const waitlistSchema = new mongoose.Schema(
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
-      index: true,
+      default: null,
     },
-
+    customerName: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    phone: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     date: {
-      type: String, // YYYY-MM-DD
+      type: String,
       required: true,
-      index: true,
     },
-
     preferredTime: {
       type: String,
       default: null,
     },
-
-    phone: {
-      type: String,
-      default: "",
-    },
-
     notes: {
       type: String,
+      trim: true,
       default: "",
     },
-
-    status: {
-      type: String,
-      enum: ["waiting", "notified", "accepted", "expired", "cancelled"],
-      default: "waiting",
-      index: true,
-    },
-
     position: {
       type: Number,
       default: 0,
     },
-
-    notifiedAt: {
-      type: Date,
+    status: {
+      type: String,
+      enum: ["waiting", "notified", "accepted", "expired", "cancelled"],
+      default: "waiting",
+    },
+    offeredTime: {
+      type: String,
       default: null,
     },
-
     expiresAt: {
       type: Date,
       default: null,
     },
   },
   { timestamps: true },
-);
-
-waitlistSchema.index(
-  { barberId: 1, date: 1, status: 1, position: 1 },
-  { name: "waitlist_queue_idx" },
 );
 
 module.exports = mongoose.model("Waitlist", waitlistSchema);
