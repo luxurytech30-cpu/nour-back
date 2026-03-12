@@ -1,20 +1,22 @@
+const jwt = require("jsonwebtoken");
+
 function requireAuth(req, res, next) {
-  if (!req.session?.user)
-    return res.status(401).json({ message: "Not logged in" });
-  next();
+  try {
+    const authHeader = req.headers.authorization || "";
+
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
 }
-const User = require("../models/User");
 
-function requireAdmin(req, res, next) {
-  console.log("COOKIE:", req.headers.cookie);
-  console.log("SESSION ID:", req.sessionID);
-  console.log("SESSION USER:", req.session?.user);
-
-  if (!req.session?.user)
-    return res.status(401).json({ message: "Not logged in" });
-  if (req.session.user.role !== "admin")
-    return res.status(403).json({ message: "Admin only" });
-  next();
-}
-
-module.exports = { requireAdmin, requireAuth };
+module.exports = { requireAuth };

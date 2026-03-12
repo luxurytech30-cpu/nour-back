@@ -5,7 +5,7 @@ const { requireAuth } = require("../middleware/auth");
 const router = express.Router();
 
 function requireAdmin(req, res, next) {
-  if (!req.session?.user) {
+  if (!req.user) {
     return res.status(401).json({ message: "Unauthorized" });
   }
 

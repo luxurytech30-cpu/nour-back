@@ -4,7 +4,7 @@ const { requireAdmin } = require("../middleware/auth");
 const upload = require("../middleware/upload"); // must export multer middleware
 const cloudinary = require("../config/cloudinary");
 const streamifier = require("streamifier");
-const isAdmin = (req) => req.session?.user?.role === "admin";
+const isAdmin = (req) => req.user?.role === "admin";
 function getDefaultWeeklyHours() {
   return {
     0: [{ start: "09:00", end: "18:00" }],

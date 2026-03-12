@@ -782,7 +782,7 @@ const { processWaitlistForBarberDate } = require("../utils/processWaitlist");
 
 console.log("✅ appointments routes file loaded");
 
-const isAdmin = (req) => req.session?.user?.role === "admin";
+const isAdmin = (req) => req.user?.role === "admin";
 const ADMIN_WHATSAPP_PHONE = process.env.ADMIN_WHATSAPP_PHONE || "0543596761";
 
 function generateManageToken() {
@@ -1059,7 +1059,7 @@ router.get("/", requireAuth, async (req, res) => {
     }
 
     if (!isAdmin(req)) {
-      if (!req.session?.user?._id) {
+      if (!req.user?._id) {
         return res.status(401).json({ message: "Unauthorized" });
       }
       q.createdByUserId = req.session.user._id;
@@ -1251,7 +1251,7 @@ router.post("/", async (req, res) => {
       bookingCode: generateBookingCode(),
       clientCanEdit: true,
       clientEditCutoffMinutes: 120,
-      createdByUserId: req.session?.user?._id || customerId || null,
+      createdByUserId: req.user?._id || customerId || null,
     });
 
     notifyAppointmentCreated(appointment).catch((err) =>
@@ -1442,7 +1442,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
     const admin = isAdmin(req);
 
     if (!admin) {
-      if (String(appt.createdByUserId) !== String(req.session?.user?._id)) {
+      if (String(appt.createdByUserId) !== String(req.user?._id)) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -1543,7 +1543,7 @@ router.delete("/:id", requireAuth, async (req, res) => {
     const admin = isAdmin(req);
 
     if (!admin) {
-      if (String(appt.createdByUserId) !== String(req.session?.user?._id)) {
+      if (String(appt.createdByUserId) !== String(req.user?._id)) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -1559,7 +1559,7 @@ router.delete("/:id", requireAuth, async (req, res) => {
 
     appt.status = "cancelled";
     appt.cancelledAt = new Date();
-    appt.cancelledByUserId = req.session?.user?._id || null;
+    appt.cancelledByUserId = req.user?._id || null;
 
     await appt.save();
 
