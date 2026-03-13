@@ -219,8 +219,18 @@ function isLastDayOfMonth(date = new Date()) {
 
 let dailyJob = null;
 let monthlyJob = null;
-
+function getReportSchedulerStatus() {
+  return {
+    dailyRunning: !!dailyJob,
+    monthlyRunning: !!monthlyJob,
+  };
+}
 function startReportScheduler() {
+  if (dailyJob || monthlyJob) {
+    console.log("ℹ️ report scheduler already running");
+    return;
+  }
+
   console.log("✅ report scheduler started");
 
   dailyJob = cron.schedule(
@@ -270,4 +280,5 @@ module.exports = {
   sendDailyReport,
   sendMonthlyReport,
   stopReportScheduler,
+  getReportSchedulerStatus,
 };
