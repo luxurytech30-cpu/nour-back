@@ -2,6 +2,8 @@ const router = require("express").Router();
 const {
   stopReportScheduler,
   startReportScheduler,
+  sendDailyReport,
+  sendMonthlyReport,
 } = require("../utils/reportScheduler");
 
 router.get("/stop", (req, res) => {
@@ -13,5 +15,24 @@ router.get("/start", (req, res) => {
   startReportScheduler();
   res.json({ ok: true, message: "Report scheduler started" });
 });
+router.post("/daily", requireAuth, async (req, res) => {
+  try {
+    await sendDailyReport(new Date());
+    res.json({ ok: true, message: "Daily report sent" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+});
 
+router.post("/monthly", requireAuth, async (req, res) => {
+  try {
+    const now = new Date();
+    await sendMonthlyReport(now.getFullYear(), now.getMonth());
+    res.json({ ok: true, message: "Monthly report sent" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+});
 module.exports = router;
