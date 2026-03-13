@@ -2,7 +2,7 @@ const cron = require("node-cron");
 const Appointment = require("../models/Appointment");
 const ReportDispatchLog = require("../models/ReportDispatchLog");
 const { sendWhatsAppToPhone } = require("./sendMessageWa");
-
+const Service = require("../models/Service");
 const ADMIN_WHATSAPP_PHONE = process.env.ADMIN_WHATSAPP_PHONE || "0543596761";
 
 function startOfDay(date = new Date()) {
@@ -16,7 +16,32 @@ function endOfDay(date = new Date()) {
   d.setHours(23, 59, 59, 999);
   return d;
 }
+async function getServicePriceMap() {
+  const services = await Service.find({}).lean();
 
+  const map = new Map();
+
+  for (const service of services) {
+    const name = String(service?.name || "").trim();
+    const nameHe = String(service?.nameHe || "").trim();
+    const price = Number(service?.price || 0);
+
+    if (name) map.set(name.toLowerCase(), price);
+    if (nameHe) map.set(nameHe.toLowerCase(), price);
+  }
+
+  return map;
+}
+
+function getAppointmentServicePrice(appointment, servicePriceMap) {
+  const serviceName = String(appointment?.service || "")
+    .trim()
+    .toLowerCase();
+
+  if (!serviceName) return 0;
+
+  return Number(servicePriceMap.get(serviceName) || 0);
+}
 function startOfMonth(year, monthIndex) {
   return new Date(year, monthIndex, 1, 0, 0, 0, 0);
 }
@@ -68,12 +93,15 @@ async function buildDailyReport(targetDate = new Date()) {
   const from = startOfDay(targetDate);
   const to = endOfDay(targetDate);
 
-  const appointments = await Appointment.find({
-    startAt: { $gte: from, $lte: to },
-  })
-    .sort({ startAt: 1 })
-    .populate("barberId", "name")
-    .lean();
+  const [appointments, servicePriceMap] = await Promise.all([
+    Appointment.find({
+      startAt: { $gte: from, $lte: to },
+    })
+      .sort({ startAt: 1 })
+      .populate("barberId", "name")
+      .lean(),
+    getServicePriceMap(),
+  ]);
 
   const total = appointments.length;
   const booked = appointments.filter((a) => a.status === "booked").length;
@@ -81,7 +109,43 @@ async function buildDailyReport(targetDate = new Date()) {
   const cancelled = appointments.filter((a) => a.status === "cancelled").length;
   const noShow = appointments.filter((a) => a.status === "no_show").length;
 
+  const bookedRevenue = appointments
+    .filter((a) => a.status === "booked")
+    .reduce(
+      (sum, a) => sum + getAppointmentServicePrice(a, servicePriceMap),
+      0,
+    );
+
+  const doneRevenue = appointments
+    .filter((a) => a.status === "done")
+    .reduce(
+      (sum, a) => sum + getAppointmentServicePrice(a, servicePriceMap),
+      0,
+    );
+
+  const expectedRevenue = appointments
+    .filter((a) => a.status === "booked" || a.status === "done")
+    .reduce(
+      (sum, a) => sum + getAppointmentServicePrice(a, servicePriceMap),
+      0,
+    );
+
+  const cancelledRevenue = appointments
+    .filter((a) => a.status === "cancelled")
+    .reduce(
+      (sum, a) => sum + getAppointmentServicePrice(a, servicePriceMap),
+      0,
+    );
+
+  const noShowRevenue = appointments
+    .filter((a) => a.status === "no_show")
+    .reduce(
+      (sum, a) => sum + getAppointmentServicePrice(a, servicePriceMap),
+      0,
+    );
+
   const barberMap = new Map();
+  const barberRevenueMap = new Map();
 
   for (const appt of appointments) {
     const barberName =
@@ -89,12 +153,27 @@ async function buildDailyReport(targetDate = new Date()) {
         ? appt.barberId.name || "ללא ספר"
         : "ללא ספר";
 
+    const price = getAppointmentServicePrice(appt, servicePriceMap);
+
     barberMap.set(barberName, (barberMap.get(barberName) || 0) + 1);
+
+    if (appt.status === "booked" || appt.status === "done") {
+      barberRevenueMap.set(
+        barberName,
+        (barberRevenueMap.get(barberName) || 0) + price,
+      );
+    }
   }
 
   const barberText =
     Array.from(barberMap.entries())
       .map(([name, count]) => `- ${name}: ${count}`)
+      .join("\n") || "- אין נתונים";
+
+  const barberRevenueText =
+    Array.from(barberRevenueMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, total]) => `- ${name}: ₪${total}`)
       .join("\n") || "- אין נתונים";
 
   const detailsText =
@@ -106,38 +185,51 @@ async function buildDailyReport(targetDate = new Date()) {
                 ? appt.barberId.name || "-"
                 : "-";
 
-            return `${i + 1}. ${formatTimeIL(appt.startAt)} | ${appt.customerName || "-"} | ${barberName} | ${appt.service || "-"} | ${getStatusLabel(appt.status)}`;
+            const price = getAppointmentServicePrice(appt, servicePriceMap);
+
+            return `${i + 1}) שעה: ${formatTimeIL(appt.startAt)}
+   לקוח: ${appt.customerName || "-"}
+   ספר: ${barberName}
+   שירות: ${appt.service || "-"}
+   מחיר: ₪${price}
+   סטטוס: ${getStatusLabel(appt.status)}`;
           })
-          .join("\n")
+          .join("\n\n")
       : "אין תורים היום";
 
   return `דוח יומי 📅
 תאריך: ${formatDateIL(targetDate)}
 
-סיכום:
+סיכום תורים:
 סה"כ תורים: ${total}
-פעילים: ${booked}
 הושלמו: ${done}
 בוטלו: ${cancelled}
-לא הגיעו: ${noShow}
+
+סיכום כספי:
+סה"כ צפוי: ₪${expectedRevenue}
 
 חלוקה לפי ספר:
 ${barberText}
 
-פירוט:
+הכנסה לפי ספר:
+${barberRevenueText}
+
+פירוט יומי:
 ${detailsText}`;
 }
-
 async function buildMonthlyReport(year, monthIndex) {
   const from = startOfMonth(year, monthIndex);
   const to = endOfMonth(year, monthIndex);
 
-  const appointments = await Appointment.find({
-    startAt: { $gte: from, $lte: to },
-  })
-    .sort({ startAt: 1 })
-    .populate("barberId", "name")
-    .lean();
+  const [appointments, servicePriceMap] = await Promise.all([
+    Appointment.find({
+      startAt: { $gte: from, $lte: to },
+    })
+      .sort({ startAt: 1 })
+      .populate("barberId", "name")
+      .lean(),
+    getServicePriceMap(),
+  ]);
 
   const total = appointments.length;
   const booked = appointments.filter((a) => a.status === "booked").length;
@@ -145,7 +237,43 @@ async function buildMonthlyReport(year, monthIndex) {
   const cancelled = appointments.filter((a) => a.status === "cancelled").length;
   const noShow = appointments.filter((a) => a.status === "no_show").length;
 
+  const bookedRevenue = appointments
+    .filter((a) => a.status === "booked")
+    .reduce(
+      (sum, a) => sum + getAppointmentServicePrice(a, servicePriceMap),
+      0,
+    );
+
+  const doneRevenue = appointments
+    .filter((a) => a.status === "done")
+    .reduce(
+      (sum, a) => sum + getAppointmentServicePrice(a, servicePriceMap),
+      0,
+    );
+
+  const expectedRevenue = appointments
+    .filter((a) => a.status === "booked" || a.status === "done")
+    .reduce(
+      (sum, a) => sum + getAppointmentServicePrice(a, servicePriceMap),
+      0,
+    );
+
+  const cancelledRevenue = appointments
+    .filter((a) => a.status === "cancelled")
+    .reduce(
+      (sum, a) => sum + getAppointmentServicePrice(a, servicePriceMap),
+      0,
+    );
+
+  const noShowRevenue = appointments
+    .filter((a) => a.status === "no_show")
+    .reduce(
+      (sum, a) => sum + getAppointmentServicePrice(a, servicePriceMap),
+      0,
+    );
+
   const barberMap = new Map();
+  const barberRevenueMap = new Map();
 
   for (const appt of appointments) {
     const barberName =
@@ -153,13 +281,28 @@ async function buildMonthlyReport(year, monthIndex) {
         ? appt.barberId.name || "ללא ספר"
         : "ללא ספר";
 
+    const price = getAppointmentServicePrice(appt, servicePriceMap);
+
     barberMap.set(barberName, (barberMap.get(barberName) || 0) + 1);
+
+    if (appt.status === "booked" || appt.status === "done") {
+      barberRevenueMap.set(
+        barberName,
+        (barberRevenueMap.get(barberName) || 0) + price,
+      );
+    }
   }
 
   const barberText =
     Array.from(barberMap.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([name, count]) => `- ${name}: ${count}`)
+      .join("\n") || "- אין נתונים";
+
+  const barberRevenueText =
+    Array.from(barberRevenueMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, total]) => `- ${name}: ₪${total}`)
       .join("\n") || "- אין נתונים";
 
   const monthLabel = new Intl.DateTimeFormat("he-IL", {
@@ -170,17 +313,22 @@ async function buildMonthlyReport(year, monthIndex) {
   return `דוח חודשי 📊
 חודש: ${monthLabel}
 
-סיכום:
+סיכום תורים:
 סה"כ תורים: ${total}
-פעילים: ${booked}
 הושלמו: ${done}
 בוטלו: ${cancelled}
-לא הגיעו: ${noShow}
+
+סיכום כספי:
+סה"כ צפוי: ₪${expectedRevenue}
+סה"כ הושלם: ₪${doneRevenue}
+סה"כ בוטל: ₪${cancelledRevenue}
 
 חלוקה לפי ספר:
-${barberText}`;
-}
+${barberText}
 
+הכנסה לפי ספר:
+${barberRevenueText}`;
+}
 async function sendDailyReport(targetDate = new Date()) {
   const key = targetDate.toISOString().slice(0, 10);
 

@@ -8,6 +8,7 @@ const {
   getReportSchedulerStatus,
 } = require("../utils/reportScheduler");
 
+console.log("XXXXX");
 router.get("/status", (req, res) => {
   console.log("X");
   res.json({
@@ -26,7 +27,7 @@ router.get("/start", (req, res) => {
   res.json({ ok: true, message: "Report scheduler started" });
 });
 
-router.post("/daily", async (req, res) => {
+router.get("/daily", async (req, res) => {
   try {
     await sendDailyReport(new Date());
     res.json({ ok: true, message: "Daily report sent" });
@@ -36,7 +37,7 @@ router.post("/daily", async (req, res) => {
   }
 });
 
-router.post("/monthly", async (req, res) => {
+router.get("/monthly", async (req, res) => {
   try {
     const now = new Date();
     await sendMonthlyReport(now.getFullYear(), now.getMonth());
