@@ -9,6 +9,7 @@ const {
 } = require("../utils/reportScheduler");
 
 router.get("/status", (req, res) => {
+  console.log("X");
   res.json({
     ok: true,
     scheduler: getReportSchedulerStatus(),
