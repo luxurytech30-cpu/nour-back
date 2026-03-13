@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const Course = require("../models/Course");
 const { requireAdmin } = require("../middleware/admin");
+const { requireAuth } = require("../middleware/auth");
 
 // list
 router.get("/", async (req, res) => {
@@ -9,7 +10,7 @@ router.get("/", async (req, res) => {
 });
 
 // create (admin)
-router.post("/", requireAdmin, async (req, res) => {
+router.post("/",requireAuth, requireAdmin, async (req, res) => {
   const { title, type, dates, barberId, isActive } = req.body;
   if (!title || !type) return res.status(400).json({ message: "title + type required" });
   if (!["online", "zoom"].includes(type)) return res.status(400).json({ message: "type must be online/zoom" });

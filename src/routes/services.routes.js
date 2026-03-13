@@ -51,7 +51,7 @@ router.get("/admin/all", requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-router.post("/admin", requireAdmin, async (req, res) => {
+router.post("/admin",requireAuth, requireAdmin, async (req, res) => {
   try {
     const { name, price, durationMin } = req.body;
 
@@ -95,7 +95,7 @@ router.post("/admin", requireAdmin, async (req, res) => {
     res.status(500).json({ message: "Failed to create service" });
   }
 });
-router.patch("/admin/:id", requireAdmin, async (req, res) => {
+router.patch("/admin/:id",requireAuth, requireAdmin, async (req, res) => {
   try {
     const { name, price, durationMin, isActive, sortOrder, description } =
       req.body;

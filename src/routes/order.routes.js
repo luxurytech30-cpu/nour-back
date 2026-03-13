@@ -67,7 +67,7 @@ router.get("/me", requireAuth, async (req, res) => {
 });
 
 // admin: list all orders
-router.get("/", requireAdmin, async (req, res) => {
+router.get("/", requireAuth, requireAdmin, async (req, res) => {
   const orders = await Order.find()
     .populate("user", "username phone")
     .sort({ createdAt: -1 });
@@ -75,7 +75,7 @@ router.get("/", requireAdmin, async (req, res) => {
 });
 
 // admin: update status
-router.patch("/:id/status", requireAdmin, async (req, res) => {
+router.patch("/:id/status", requireAuth, requireAdmin, async (req, res) => {
   const { status } = req.body;
   const ok = ["pending", "paid", "cancelled"].includes(status);
   if (!ok) return res.status(400).json({ message: "Invalid status" });

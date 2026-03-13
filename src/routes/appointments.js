@@ -205,7 +205,7 @@
 //   if (appointment.status === "done") return false;
 //   if (appointment.status === "no_show") return false;
 
-//   const cutoffMinutes = Number(appointment.clientEditCutoffMinutes || 120);
+//   const cutoffMinutes = Number(appointment.clientEditCutoffMinutes || 180);
 //   const now = new Date();
 //   const diffMs = new Date(appointment.startAt).getTime() - now.getTime();
 //   const diffMinutes = diffMs / (1000 * 60);
@@ -456,7 +456,7 @@
 //       manageToken: generateManageToken(),
 //       bookingCode: generateBookingCode(),
 //       clientCanEdit: true,
-//       clientEditCutoffMinutes: 120,
+//       clientEditCutoffMinutes: 180,
 //       createdByUserId: req.session?.user?._id || customerId || null,
 //     });
 //     await notifyAppointmentCreated(appointment);
@@ -633,7 +633,7 @@
 //         return res.status(403).json({ message: "Forbidden" });
 //       }
 
-//       const cutoffMin = appt.clientEditCutoffMinutes ?? 120;
+//       const cutoffMin = appt.clientEditCutoffMinutes ?? 180;
 //       const cutoffTime = new Date(
 //         new Date(appt.startAt).getTime() - cutoffMin * 60000,
 //       );
@@ -723,7 +723,7 @@
 //         return res.status(403).json({ message: "Forbidden" });
 //       }
 
-//       const cutoffMin = appt.clientEditCutoffMinutes ?? 120;
+//       const cutoffMin = appt.clientEditCutoffMinutes ?? 180;
 //       const cutoffTime = new Date(
 //         new Date(appt.startAt).getTime() - cutoffMin * 60000,
 //       );
@@ -815,7 +815,27 @@ function formatAppointmentDateTime(startAt, endAt) {
 
   return { date, time };
 }
+async function getAppointmentBarberName(appointment) {
+  try {
+    if (!appointment?.barberId) return "-";
 
+    if (
+      typeof appointment.barberId === "object" &&
+      appointment.barberId?.name
+    ) {
+      return appointment.barberId.name;
+    }
+
+    const barber = await Barber.findById(appointment.barberId)
+      .select("name")
+      .lean();
+
+    return barber?.name || "-";
+  } catch (err) {
+    console.error("getAppointmentBarberName error:", err.message);
+    return "-";
+  }
+}
 function getDateOnlyFromStartAt(startAt) {
   if (!startAt) return "";
   return new Date(startAt).toISOString().slice(0, 10);
@@ -843,7 +863,7 @@ function canClientManageAppointment(appointment) {
   if (appointment.status === "done") return false;
   if (appointment.status === "no_show") return false;
 
-  const cutoffMinutes = Number(appointment.clientEditCutoffMinutes || 120);
+  const cutoffMinutes = Number(appointment.clientEditCutoffMinutes || 180);
   const now = new Date();
   const diffMs = new Date(appointment.startAt).getTime() - now.getTime();
   const diffMinutes = diffMs / (1000 * 60);
@@ -902,10 +922,11 @@ async function notifyAppointmentCreated(appointment) {
     const bookingCode = appointment.bookingCode || "-";
     const customerName = appointment.customerName || "לקוח";
     const service = appointment.service || "-";
-
+    const barberName = await getAppointmentBarberName(appointment);
     const adminMessage = `תור חדש נקבע ✅
 לקוח: ${customerName}
 טלפון: ${appointment.phone || "-"}
+ספר: ${barberName}
 שירות: ${service}
 תאריך: ${date}
 שעה: ${time}
@@ -914,6 +935,7 @@ async function notifyAppointmentCreated(appointment) {
     const customerMessage = `היי ${customerName},
 התור שלך נקבע בהצלחה ✅
 
+ספר: ${barberName}
 שירות: ${service}
 תאריך: ${date}
 שעה: ${time}
@@ -940,10 +962,11 @@ async function notifyAppointmentUpdated(appointment) {
     const bookingCode = appointment.bookingCode || "-";
     const customerName = appointment.customerName || "לקוח";
     const service = appointment.service || "-";
-
+    const barberName = await getAppointmentBarberName(appointment);
     const adminMessage = `תור עודכן ✏️
 לקוח: ${customerName}
 טלפון: ${appointment.phone || "-"}
+ספר: ${barberName}
 שירות: ${service}
 תאריך: ${date}
 שעה: ${time}
@@ -953,6 +976,7 @@ async function notifyAppointmentUpdated(appointment) {
     const customerMessage = `היי ${customerName},
 התור שלך עודכן ✏️
 
+ספר: ${barberName}
 שירות: ${service}
 תאריך: ${date}
 שעה: ${time}
@@ -979,10 +1003,11 @@ async function notifyAppointmentCancelled(appointment) {
     const bookingCode = appointment.bookingCode || "-";
     const customerName = appointment.customerName || "לקוח";
     const service = appointment.service || "-";
-
+    const barberName = await getAppointmentBarberName(appointment);
     const adminMessage = `תור בוטל ❌
 לקוח: ${customerName}
 טלפון: ${appointment.phone || "-"}
+ספר: ${barberName}
 שירות: ${service}
 תאריך: ${date}
 שעה: ${time}
@@ -991,6 +1016,7 @@ async function notifyAppointmentCancelled(appointment) {
     const customerMessage = `היי ${customerName},
 התור שלך בוטל ❌
 
+ספר: ${barberName}
 שירות: ${service}
 תאריך: ${date}
 שעה: ${time}
@@ -1017,10 +1043,11 @@ async function notifyAppointmentDeleted(appointment) {
     const bookingCode = appointment.bookingCode || "-";
     const customerName = appointment.customerName || "לקוח";
     const service = appointment.service || "-";
-
+    const barberName = await getAppointmentBarberName(appointment);
     const adminMessage = `תור נמחק 🗑️
 לקוח: ${customerName}
 טלפון: ${appointment.phone || "-"}
+ספר: ${barberName}
 שירות: ${service}
 תאריך: ${date}
 שעה: ${time}
@@ -1029,6 +1056,7 @@ async function notifyAppointmentDeleted(appointment) {
     const customerMessage = `היי ${customerName},
 התור שלך נמחק ממערכת ההזמנות 🗑️
 
+ספר: ${barberName}
 שירות: ${service}
 תאריך: ${date}
 שעה: ${time}
@@ -1250,7 +1278,7 @@ router.post("/", async (req, res) => {
       manageToken: generateManageToken(),
       bookingCode: generateBookingCode(),
       clientCanEdit: true,
-      clientEditCutoffMinutes: 120,
+      clientEditCutoffMinutes: 180,
       createdByUserId: req.user?._id || customerId || null,
     });
 
@@ -1446,7 +1474,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
         return res.status(403).json({ message: "Forbidden" });
       }
 
-      const cutoffMin = appt.clientEditCutoffMinutes ?? 120;
+      const cutoffMin = appt.clientEditCutoffMinutes ?? 180;
       const cutoffTime = new Date(
         new Date(appt.startAt).getTime() - cutoffMin * 60000,
       );
@@ -1547,7 +1575,7 @@ router.delete("/:id", requireAuth, async (req, res) => {
         return res.status(403).json({ message: "Forbidden" });
       }
 
-      const cutoffMin = appt.clientEditCutoffMinutes ?? 120;
+      const cutoffMin = appt.clientEditCutoffMinutes ?? 180;
       const cutoffTime = new Date(
         new Date(appt.startAt).getTime() - cutoffMin * 60000,
       );

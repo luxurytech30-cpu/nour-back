@@ -3,6 +3,8 @@ const Product = require("../models/Product");
 const upload = require("../middleware/upload");
 const cloudinary = require("../config/cloudinary");
 const { requireAdmin } = require("../middleware/admin");
+const { requireAuth } = require("../middleware/auth");
+
 
 // list
 router.get("/", async (req, res) => {
@@ -14,7 +16,7 @@ router.get("/", async (req, res) => {
 });
 
 // create (admin) + image to cloudinary
-router.post("/", requireAdmin, upload.single("image"), async (req, res) => {
+router.post("/",requireAuth, requireAdmin, upload.single("image"), async (req, res) => {
   const { name, descrip, price, stock, isTop, isActive, cate, brand } =
     req.body;
   if (!name || price == null)
@@ -45,7 +47,7 @@ router.post("/", requireAdmin, upload.single("image"), async (req, res) => {
   res.json(product);
 });
 
-router.patch("/:id", requireAdmin, upload.single("image"), async (req, res) => {
+router.patch("/:id",requireAuth, requireAdmin, upload.single("image"), async (req, res) => {
   try {
     console.log("PATCH BODY:", req.body);
     console.log(
@@ -123,7 +125,7 @@ router.patch("/:id", requireAdmin, upload.single("image"), async (req, res) => {
 });
 
 // delete (admin)
-router.delete("/:id", requireAdmin, async (req, res) => {
+router.delete("/:id",requireAuth, requireAdmin, async (req, res) => {
   const p = await Product.findById(req.params.id);
   if (!p) return res.status(404).json({ message: "Not found" });
   if (p.image?.publicId)

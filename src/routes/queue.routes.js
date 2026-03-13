@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const Queue = require("../models/Queue");
 const { requireAdmin } = require("../middleware/admin");
+const { requireAuth } = require("../middleware/auth");
 
 // create/get main queue (simple)
 router.get("/main", async (req, res) => {
@@ -10,7 +11,7 @@ router.get("/main", async (req, res) => {
 });
 
 // add queue item (admin)
-router.post("/main/items", requireAdmin, async (req, res) => {
+router.post("/main/items",requireAuth, requireAdmin, async (req, res) => {
   const { customerName, phone, barberId, queueLizer } = req.body;
   if (!customerName) return res.status(400).json({ message: "customerName required" });
 
@@ -30,7 +31,7 @@ router.post("/main/items", requireAdmin, async (req, res) => {
 });
 
 // update item status (admin)
-router.patch("/main/items/:itemId", requireAdmin, async (req, res) => {
+router.patch("/main/items/:itemId",requireAuth, requireAdmin, async (req, res) => {
   const { status } = req.body;
   const q = await Queue.findOne({ title: "Main Queue" });
   if (!q) return res.status(404).json({ message: "Queue not found" });

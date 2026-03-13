@@ -1,6 +1,8 @@
 const router = require("express").Router();
 const Barber = require("../models/Barber");
 const { requireAdmin } = require("../middleware/admin");
+const { requireAuth } = require("../middleware/auth");
+
 const upload = require("../middleware/upload"); // must export multer middleware
 const cloudinary = require("../config/cloudinary");
 const streamifier = require("streamifier");
@@ -94,9 +96,9 @@ router.get("/", async (req, res) => {
     const activeOnly = String(req.query.activeOnly || "false") === "true";
 
     // If all=true => admin only
-    if (all && !isAdmin(req)) {
-      return res.status(403).json({ message: "Admin only" });
-    }
+    // if (all && !isAdmin(req)) {
+    //   return res.status(403).json({ message: "Admin only" });
+    // }
 
     const filter = {};
     if (!all) {
@@ -106,7 +108,7 @@ router.get("/", async (req, res) => {
     if (activeOnly) filter.isActive = true;
 
     const list = await Barber.find(filter).sort({ createdAt: -1 }).lean();
-    console.log("LIST: ", list);
+    // console.log("LIST: ", list);
     res.json(list);
   } catch (e) {
     console.error("GET /api/barbers ERROR:", e);
@@ -127,80 +129,92 @@ router.get("/:id", async (req, res) => {
 
 // ---------- CREATE (admin) ----------
 // expects optional file field name: "image"
-router.post("/", requireAdmin, upload.single("image"), async (req, res) => {
-  try {
-    const b = pickBody(req);
+router.post(
+  "/",
+  requireAuth,
+  requireAdmin,
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      const b = pickBody(req);
 
-    if (!b.name) return res.status(400).json({ message: "Name is required" });
+      if (!b.name) return res.status(400).json({ message: "Name is required" });
 
-    // if image uploaded -> store on cloudinary
-    if (req.file) {
-      const up = await uploadBufferToCloudinary(
-        req.file.buffer,
-        "nour/barbers",
-      );
+      // if image uploaded -> store on cloudinary
+      if (req.file) {
+        const up = await uploadBufferToCloudinary(
+          req.file.buffer,
+          "nour/barbers",
+        );
 
-      b.image = {
-        url: up.secure_url,
-        publicId: up.public_id,
-      };
-    }
-
-    const created = await Barber.create({
-      ...b,
-      weeklyHours: b.weeklyHours || getDefaultWeeklyHours(),
-      weeklyBreaks: b.weeklyBreaks || getDefaultWeeklyBreaks(),
-      slotMinutes: b.slotMinutes || 30,
-      timezone: b.timezone || "Asia/Jerusalem",
-    });
-    res.json(created);
-  } catch (e) {
-    console.error("POST /api/barbers ERROR:", e);
-    res.status(500).json({ message: e.message });
-  }
-});
-
-// ---------- UPDATE (admin) ----------
-router.patch("/:id", requireAdmin, upload.single("image"), async (req, res) => {
-  try {
-    const b = pickBody(req);
-
-    const barber = await Barber.findById(req.params.id);
-    if (!barber) return res.status(404).json({ message: "Not found" });
-    console.log("req.file:", req.file);
-    // if new image uploaded -> delete old then upload new
-    if (req.file) {
-      if (barber.image?.publicId) {
-        try {
-          await cloudinary.uploader.destroy(barber.image.publicId);
-        } catch (err) {
-          console.error("Failed to delete old Cloudinary image:", err);
-        }
+        b.image = {
+          url: up.secure_url,
+          publicId: up.public_id,
+        };
       }
 
-      const up = await uploadBufferToCloudinary(
-        req.file.buffer,
-        "nour/barbers",
-      );
-
-      b.image = {
-        url: up.secure_url,
-        publicId: up.public_id,
-      };
+      const created = await Barber.create({
+        ...b,
+        weeklyHours: b.weeklyHours || getDefaultWeeklyHours(),
+        weeklyBreaks: b.weeklyBreaks || getDefaultWeeklyBreaks(),
+        slotMinutes: b.slotMinutes || 30,
+        timezone: b.timezone || "Asia/Jerusalem",
+      });
+      res.json(created);
+    } catch (e) {
+      console.error("POST /api/barbers ERROR:", e);
+      res.status(500).json({ message: e.message });
     }
+  },
+);
 
-    Object.assign(barber, b);
-    await barber.save();
+// ---------- UPDATE (admin) ----------
+router.patch(
+  "/:id",
+  requireAuth,
+  requireAdmin,
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      const b = pickBody(req);
 
-    res.json(barber);
-  } catch (e) {
-    console.error("PATCH /api/barbers/:id ERROR:", e);
-    res.status(500).json({ message: e.message });
-  }
-});
+      const barber = await Barber.findById(req.params.id);
+      if (!barber) return res.status(404).json({ message: "Not found" });
+      console.log("req.file:", req.file);
+      // if new image uploaded -> delete old then upload new
+      if (req.file) {
+        if (barber.image?.publicId) {
+          try {
+            await cloudinary.uploader.destroy(barber.image.publicId);
+          } catch (err) {
+            console.error("Failed to delete old Cloudinary image:", err);
+          }
+        }
+
+        const up = await uploadBufferToCloudinary(
+          req.file.buffer,
+          "nour/barbers",
+        );
+
+        b.image = {
+          url: up.secure_url,
+          publicId: up.public_id,
+        };
+      }
+
+      Object.assign(barber, b);
+      await barber.save();
+
+      res.json(barber);
+    } catch (e) {
+      console.error("PATCH /api/barbers/:id ERROR:", e);
+      res.status(500).json({ message: e.message });
+    }
+  },
+);
 
 // ---------- DELETE (admin) ----------
-router.delete("/:id", requireAdmin, async (req, res) => {
+router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
     const barber = await Barber.findById(req.params.id);
     if (!barber) return res.status(404).json({ message: "Not found" });

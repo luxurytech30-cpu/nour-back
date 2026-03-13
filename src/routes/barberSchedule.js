@@ -1,5 +1,6 @@
 const router = require("express").Router();
 const Barber = require("../models/Barber");
+const { requireAuth } = require("../middleware/auth");
 const { requireAdmin } = require("../middleware/admin");
 
 // -------- helpers ----------
@@ -86,86 +87,102 @@ router.get("/:barberId", async (req, res) => {
 });
 
 // ---------- ADMIN: set weekly hours ----------
-router.put("/:barberId/weekly-hours", requireAdmin, async (req, res) => {
-  try {
-    const weeklyHours = normalizeMap(req.body.weeklyHours);
-    const b = await Barber.findByIdAndUpdate(
-      req.params.barberId,
-      { $set: { weeklyHours } },
-      { new: true },
-    ).lean();
+router.put(
+  "/:barberId/weekly-hours",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const weeklyHours = normalizeMap(req.body.weeklyHours);
+      const b = await Barber.findByIdAndUpdate(
+        req.params.barberId,
+        { $set: { weeklyHours } },
+        { new: true },
+      ).lean();
 
-    if (!b) return res.status(404).json(fail("Barber not found"));
-    res.json(ok(b.weeklyHours));
-  } catch (e) {
-    res.status(400).json(fail(e.message));
-  }
-});
+      if (!b) return res.status(404).json(fail("Barber not found"));
+      res.json(ok(b.weeklyHours));
+    } catch (e) {
+      res.status(400).json(fail(e.message));
+    }
+  },
+);
 
 // ---------- ADMIN: set weekly breaks ----------
-router.put("/:barberId/weekly-breaks", requireAdmin, async (req, res) => {
-  try {
-    const weeklyBreaks = normalizeMap(req.body.weeklyBreaks);
-    const b = await Barber.findByIdAndUpdate(
-      req.params.barberId,
-      { $set: { weeklyBreaks } },
-      { new: true },
-    ).lean();
+router.put(
+  "/:barberId/weekly-breaks",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const weeklyBreaks = normalizeMap(req.body.weeklyBreaks);
+      const b = await Barber.findByIdAndUpdate(
+        req.params.barberId,
+        { $set: { weeklyBreaks } },
+        { new: true },
+      ).lean();
 
-    if (!b) return res.status(404).json(fail("Barber not found"));
-    res.json(ok(b.weeklyBreaks));
-  } catch (e) {
-    res.status(400).json(fail(e.message));
-  }
-});
+      if (!b) return res.status(404).json(fail("Barber not found"));
+      res.json(ok(b.weeklyBreaks));
+    } catch (e) {
+      res.status(400).json(fail(e.message));
+    }
+  },
+);
 
 // ---------- ADMIN: set FULL weekly schedule ----------
-router.put("/:barberId/weekly-schedule", requireAdmin, async (req, res) => {
-  try {
-    const weeklyHours = normalizeMap(req.body.weeklyHours || {});
-    const weeklyBreaks = normalizeMap(req.body.weeklyBreaks || {});
-    const slotMinutes = Number(req.body.slotMinutes || 30);
-    const timezone = String(req.body.timezone || "Asia/Jerusalem");
+router.put(
+  "/:barberId/weekly-schedule",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const weeklyHours = normalizeMap(req.body.weeklyHours || {});
+      const weeklyBreaks = normalizeMap(req.body.weeklyBreaks || {});
+      const slotMinutes = Number(req.body.slotMinutes || 30);
+      const timezone = String(req.body.timezone || "Asia/Jerusalem");
 
-    if (!Number.isFinite(slotMinutes) || slotMinutes <= 0) {
-      return res
-        .status(400)
-        .json(fail("slotMinutes must be a positive number"));
-    }
+      if (!Number.isFinite(slotMinutes) || slotMinutes <= 0) {
+        return res
+          .status(400)
+          .json(fail("slotMinutes must be a positive number"));
+      }
 
-    const barber = await Barber.findByIdAndUpdate(
-      req.params.barberId,
-      {
-        $set: {
-          weeklyHours,
-          weeklyBreaks,
-          slotMinutes,
-          timezone,
+      const barber = await Barber.findByIdAndUpdate(
+        req.params.barberId,
+        {
+          $set: {
+            weeklyHours,
+            weeklyBreaks,
+            slotMinutes,
+            timezone,
+          },
         },
-      },
-      { new: true },
-    ).lean();
+        { new: true },
+      ).lean();
 
-    if (!barber) return res.status(404).json(fail("Barber not found"));
+      if (!barber) return res.status(404).json(fail("Barber not found"));
 
-    res.json(
-      ok({
-        barberId: barber._id,
-        weeklyHours: barber.weeklyHours || {},
-        weeklyBreaks: barber.weeklyBreaks || {},
-        slotMinutes: barber.slotMinutes,
-        timezone: barber.timezone,
-        overrides: barber.overrides || [],
-      }),
-    );
-  } catch (e) {
-    res.status(400).json(fail(e.message));
-  }
-});
+      res.json(
+        ok({
+          barberId: barber._id,
+          weeklyHours: barber.weeklyHours || {},
+          weeklyBreaks: barber.weeklyBreaks || {},
+          slotMinutes: barber.slotMinutes,
+          timezone: barber.timezone,
+          overrides: barber.overrides || [],
+        }),
+      );
+    } catch (e) {
+      res.status(400).json(fail(e.message));
+    }
+  },
+);
 
 // ---------- ADMIN: reset default schedule ----------
 router.put(
   "/:barberId/reset-default-schedule",
+  requireAuth,
   requireAdmin,
   async (req, res) => {
     try {
@@ -201,69 +218,80 @@ router.put(
 );
 
 // ---------- ADMIN: block a full date ----------
-router.post("/:barberId/block-date", requireAdmin, async (req, res) => {
-  try {
-    const { date, note = "" } = req.body;
-    if (!isDate(date)) {
-      return res.status(400).json(fail("date must be YYYY-MM-DD"));
+router.post(
+  "/:barberId/block-date",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { date, note = "" } = req.body;
+      if (!isDate(date)) {
+        return res.status(400).json(fail("date must be YYYY-MM-DD"));
+      }
+
+      const barber = await Barber.findById(req.params.barberId);
+      if (!barber) return res.status(404).json(fail("Barber not found"));
+
+      barber.overrides = upsertOverride(barber.overrides, {
+        date,
+        isClosed: true,
+        hours: [],
+        breaks: [],
+        note,
+      });
+
+      await barber.save();
+      res.json(ok(barber.overrides));
+    } catch (e) {
+      res.status(500).json(fail(e.message));
     }
-
-    const barber = await Barber.findById(req.params.barberId);
-    if (!barber) return res.status(404).json(fail("Barber not found"));
-
-    barber.overrides = upsertOverride(barber.overrides, {
-      date,
-      isClosed: true,
-      hours: [],
-      breaks: [],
-      note,
-    });
-
-    await barber.save();
-    res.json(ok(barber.overrides));
-  } catch (e) {
-    res.status(500).json(fail(e.message));
-  }
-});
+  },
+);
 
 // ---------- ADMIN: set custom hours/breaks for a specific date ----------
-router.post("/:barberId/override-date", requireAdmin, async (req, res) => {
-  try {
-    const {
-      date,
-      isClosed = false,
-      hours = [],
-      breaks = [],
-      note = "",
-    } = req.body;
+router.post(
+  "/:barberId/override-date",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const {
+        date,
+        isClosed = false,
+        hours = [],
+        breaks = [],
+        note = "",
+      } = req.body;
 
-    if (!isDate(date)) {
-      return res.status(400).json(fail("date must be YYYY-MM-DD"));
+      if (!isDate(date)) {
+        return res.status(400).json(fail("date must be YYYY-MM-DD"));
+      }
+
+      const patch = {
+        date,
+        isClosed: !!isClosed,
+        hours: normalizeRanges(hours),
+        breaks: normalizeRanges(breaks),
+        note: String(note || ""),
+      };
+
+      const barber = await Barber.findById(req.params.barberId);
+      if (!barber) return res.status(404).json(fail("Barber not found"));
+
+      barber.overrides = upsertOverride(barber.overrides, patch);
+      await barber.save();
+
+      res.json(ok(barber.overrides));
+    } catch (e) {
+      res.status(400).json(fail(e.message));
     }
-
-    const patch = {
-      date,
-      isClosed: !!isClosed,
-      hours: normalizeRanges(hours),
-      breaks: normalizeRanges(breaks),
-      note: String(note || ""),
-    };
-
-    const barber = await Barber.findById(req.params.barberId);
-    if (!barber) return res.status(404).json(fail("Barber not found"));
-
-    barber.overrides = upsertOverride(barber.overrides, patch);
-    await barber.save();
-
-    res.json(ok(barber.overrides));
-  } catch (e) {
-    res.status(400).json(fail(e.message));
-  }
-});
+  },
+);
 
 // ---------- ADMIN: remove override ----------
 router.delete(
   "/:barberId/override-date/:date",
+  requireAuth,
   requireAdmin,
   async (req, res) => {
     try {
