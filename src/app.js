@@ -26,6 +26,7 @@ const allowedOrigins = [
   "http://localhost:8080",
   "http://localhost:8081",
   "http://192.168.1.7:8080",
+  "https://epex-5a7smg6wr-luxury-techs-projects.vercel.app",
 ];
 
 // app.set("trust proxy", 1);
