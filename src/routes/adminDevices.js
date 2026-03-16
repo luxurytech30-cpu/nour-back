@@ -2,9 +2,10 @@
 const router = require("express").Router();
 const AdminDevice = require("../models/AdminDevice");
 const { requireAuth } = require("../middleware/auth");
-
+console.log("X in REGISTER ");
 router.post("/register", requireAuth, async (req, res) => {
   try {
+    console.log("YYYYYY in REGISTER ");
     const { token, platform = "web" } = req.body;
 
     if (!token) {
