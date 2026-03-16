@@ -1,38 +1,48 @@
-// utils/sendPushToAdmins.js
 const AdminDevice = require("../models/AdminDevice");
-const admin = require("../config/firebaseAdmin"); // firebase-admin init
+const admin = require("../config/firebaseAdmin");
 
 async function sendPushToAdmins({ title, body, data = {} }) {
-  const devices = await AdminDevice.find({ enabled: true }).lean();
-  const tokens = devices.map((d) => d.token).filter(Boolean);
+  try {
+    const devices = await AdminDevice.find({ enabled: true }).lean();
+    const tokens = devices.map((d) => d.token).filter(Boolean);
 
-  if (!tokens.length) return;
+    console.log("PUSH TOKENS:", tokens);
+    console.log("PUSH PAYLOAD:", { title, body, data });
 
-  const message = {
-    tokens,
-    notification: {
-      title,
-      body,
-    },
-    data: Object.fromEntries(
-      Object.entries(data).map(([k, v]) => [k, String(v)]),
-    ),
-  };
+    if (!tokens.length) {
+      console.log("NO TOKENS TO SEND");
+      return;
+    }
 
-  const response = await admin.messaging().sendEachForMulticast(message);
+    const response = await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: {
+        title,
+        body,
+      },
+      data: Object.fromEntries(
+        Object.entries(data).map(([k, v]) => [k, String(v)]),
+      ),
+      webpush: {
+        notification: {
+          title,
+          body,
+          icon: "/icon.png",
+        },
+      },
+    });
 
-  // optional: disable invalid tokens
-  const invalidIndexes = [];
-  response.responses.forEach((r, i) => {
-    if (!r.success) invalidIndexes.push(i);
-  });
-
-  if (invalidIndexes.length) {
-    const invalidTokens = invalidIndexes.map((i) => tokens[i]);
-    await AdminDevice.updateMany(
-      { token: { $in: invalidTokens } },
-      { $set: { enabled: false } },
+    console.log("PUSH SUCCESS:", response.successCount);
+    console.log("PUSH FAIL:", response.failureCount);
+    console.log(
+      "PUSH RESPONSES:",
+      response.responses.map((r) => ({
+        success: r.success,
+        error: r.error?.message || null,
+      })),
     );
+  } catch (error) {
+    console.error("sendPushToAdmins error:", error);
   }
 }
 
