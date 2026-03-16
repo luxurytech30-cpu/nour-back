@@ -779,6 +779,7 @@ const {
   normalizeIsraeliPhone,
 } = require("../utils/sendMessageWa");
 const { processWaitlistForBarberDate } = require("../utils/processWaitlist");
+const { sendPushToAdmins } = require("../utils/sendPushToAdmins");
 
 console.log("✅ appointments routes file loaded");
 
@@ -942,7 +943,14 @@ async function notifyAppointmentCreated(appointment) {
 קוד הזמנה: ${bookingCode}`;
 
     await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
-
+    await sendPushToAdmins({
+      title: "תור חדש נקבע",
+      body: `${customerName} • ${service} • ${time}`,
+      data: {
+        type: "appointment_created",
+        appointmentId: String(appointment._id),
+      },
+    });
     if (customerPhone) {
       await sendWhatsAppToPhone(customerPhone, customerMessage);
     }
@@ -983,7 +991,14 @@ async function notifyAppointmentUpdated(appointment) {
 קוד הזמנה: ${bookingCode}`;
 
     await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
-
+    await sendPushToAdmins({
+      title: "תור עודכן",
+      body: `${customerName} • ${service} • ${time}`,
+      data: {
+        type: "appointment_created",
+        appointmentId: String(appointment._id),
+      },
+    });
     if (customerPhone) {
       await sendWhatsAppToPhone(customerPhone, customerMessage);
     }
@@ -1023,7 +1038,14 @@ async function notifyAppointmentCancelled(appointment) {
 קוד הזמנה: ${bookingCode}`;
 
     await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
-
+    await sendPushToAdmins({
+      title: "תור התבטל",
+      body: `${customerName} • ${service} • ${time}`,
+      data: {
+        type: "appointment_created",
+        appointmentId: String(appointment._id),
+      },
+    });
     if (customerPhone) {
       await sendWhatsAppToPhone(customerPhone, customerMessage);
     }
@@ -1063,7 +1085,14 @@ async function notifyAppointmentDeleted(appointment) {
 קוד הזמנה: ${bookingCode}`;
 
     await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
-
+    await sendPushToAdmins({
+      title: "תור נמחק",
+      body: `${customerName} • ${service} • ${time}`,
+      data: {
+        type: "appointment_created",
+        appointmentId: String(appointment._id),
+      },
+    });
     if (customerPhone) {
       await sendWhatsAppToPhone(customerPhone, customerMessage);
     }
