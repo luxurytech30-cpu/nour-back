@@ -1,22 +1,34 @@
-const jwt = require("jsonwebtoken");
-
-function requireAuth(req, res, next) {
+// routes/adminDevices.js
+const router = require("express").Router();
+const AdminDevice = require("../models/AdminDevice");
+const { requireAuth } = require("../middleware/auth");
+console.log("X in REGISTER ");
+router.post("/register", requireAuth, async (req, res) => {
   try {
-    const authHeader = req.headers.authorization || "";
+    console.log("YYYYYY in REGISTER ");
+    const { token, platform = "web" } = req.body;
 
-    if (!authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Unauthorized" });
+    if (!token) {
+      return res.status(400).json({ message: "token is required" });
     }
 
-    const token = authHeader.split(" ")[1];
+    await AdminDevice.findOneAndUpdate(
+      { token },
+      {
+        userId: req.user._id,
+        token,
+        platform,
+        enabled: true,
+        lastSeenAt: new Date(),
+      },
+      { upsert: true, new: true },
+    );
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    req.user = decoded;
-    next();
+    res.json({ ok: true });
   } catch (error) {
-    return res.status(401).json({ message: "Unauthorized" });
+    console.error("register device token error:", error);
+    res.status(500).json({ message: "Failed to register device" });
   }
-}
+});
 
-module.exports = { requireAuth };
+module.exports = router;
