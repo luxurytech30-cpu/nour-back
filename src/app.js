@@ -27,28 +27,29 @@ const allowedOrigins = [
   "http://localhost:8081",
   "http://192.168.1.7:8080",
   "https://epex-5a7smg6wr-luxury-techs-projects.vercel.app",
+  "https://apex-nkf6x8zvc-luxury-techs-projects.vercel.app",
 ];
 
 // app.set("trust proxy", 1);
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      console.log("CORS ORIGIN:", origin);
+// app.use(
+//   cors({
+//     origin(origin, callback) {
+//       console.log("CORS ORIGIN:", origin);
 
-      if (!origin) return callback(null, true);
+//       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+//       if (allowedOrigins.includes(origin)) {
+//         return callback(null, true);
+//       }
 
-      return callback(new Error(`Origin not allowed: ${origin}`));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  }),
-);
-
+//       return callback(new Error(`Origin not allowed: ${origin}`));
+//     },
+//     credentials: true,
+//     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+//   }),
+// );
+app.use(cors());
 // app.use((req, res, next) => {
 //   console.log("ORIGIN:", req.headers.origin);
 //   console.log("COOKIE:", req.headers.cookie);
