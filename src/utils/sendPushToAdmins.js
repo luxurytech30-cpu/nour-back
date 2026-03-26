@@ -1,13 +1,43 @@
 const AdminDevice = require("../models/AdminDevice");
 const admin = require("../config/firebaseAdmin");
 
-async function sendPushToAdmins({ title, body, data = {} }) {
+async function sendPushToRelevantAdmins({
+  title,
+  body,
+  data = {},
+  barberId = null,
+  includeMainAdmins = true,
+}) {
   try {
-    const devices = await AdminDevice.find({ enabled: true }).lean();
-    const tokens = devices.map((d) => d.token).filter(Boolean);
+    const orConditions = [];
 
-    console.log("PUSH TOKENS:", tokens);
-    console.log("PUSH PAYLOAD:", { title, body, data });
+    if (includeMainAdmins) {
+      orConditions.push({ isMainAdmin: true });
+    }
+
+    if (barberId) {
+      orConditions.push({ barberId });
+    }
+
+    if (!orConditions.length) {
+      console.log("NO TARGET CONDITIONS");
+      return;
+    }
+
+    const devices = await AdminDevice.find({
+      enabled: true,
+      $or: orConditions,
+    }).lean();
+
+    const tokens = [...new Set(devices.map((d) => d.token).filter(Boolean))];
+
+    console.log("TARGET PUSH TOKENS:", tokens);
+    console.log("TARGET PUSH PAYLOAD:", {
+      title,
+      body,
+      data,
+      barberId: barberId ? String(barberId) : null,
+    });
 
     if (!tokens.length) {
       console.log("NO TOKENS TO SEND");
@@ -21,7 +51,10 @@ async function sendPushToAdmins({ title, body, data = {} }) {
         body,
       },
       data: Object.fromEntries(
-        Object.entries(data).map(([k, v]) => [k, String(v)]),
+        Object.entries({
+          ...data,
+          barberId: barberId ? String(barberId) : "",
+        }).map(([k, v]) => [k, String(v)]),
       ),
       webpush: {
         notification: {
@@ -41,9 +74,24 @@ async function sendPushToAdmins({ title, body, data = {} }) {
         error: r.error?.message || null,
       })),
     );
+
+    const failedTokens = response.responses
+      .map((r, i) => ({
+        success: r.success,
+        token: tokens[i],
+      }))
+      .filter((x) => !x.success)
+      .map((x) => x.token);
+
+    if (failedTokens.length) {
+      await AdminDevice.updateMany(
+        { token: { $in: failedTokens } },
+        { $set: { enabled: false } },
+      );
+    }
   } catch (error) {
-    console.error("sendPushToAdmins error:", error);
+    console.error("sendPushToRelevantAdmins error:", error);
   }
 }
 
-module.exports = { sendPushToAdmins };
+module.exports = { sendPushToRelevantAdmins };

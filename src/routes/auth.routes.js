@@ -1,7 +1,6 @@
 const router = require("express").Router();
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
-
 function signToken(user) {
   return jwt.sign(
     {
@@ -10,6 +9,8 @@ function signToken(user) {
       role: user.role || "user",
       name: user.name || "",
       phone: user.phone || "",
+      barberId: user.barberId ? String(user.barberId) : null,
+      isMainAdmin: !!user.isMainAdmin,
     },
     process.env.JWT_SECRET,
     { expiresIn: "7d" },
@@ -41,6 +42,8 @@ router.post("/login", async (req, res) => {
         username: user.username || "",
         phone: user.phone || "",
         role: user.role || "user",
+        barberId: user.barberId ? String(user.barberId) : null,
+        isMainAdmin: !!user.isMainAdmin,
       },
     });
   } catch (error) {
@@ -77,6 +80,8 @@ router.post("/register", async (req, res) => {
         username: user.username || "",
         phone: user.phone || "",
         role: user.role || "user",
+        barberId: user.barberId ? String(user.barberId) : null,
+        isMainAdmin: !!user.isMainAdmin,
       },
     });
   } catch (error) {
@@ -103,6 +108,8 @@ router.get("/me", async (req, res) => {
         username: decoded.username || "",
         phone: decoded.phone || "",
         role: decoded.role || "user",
+        barberId: decoded.barberId || null,
+        isMainAdmin: !!decoded.isMainAdmin,
       },
     });
   } catch (error) {

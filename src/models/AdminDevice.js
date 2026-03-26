@@ -1,27 +1,40 @@
-// models/AdminDevice.js
 const mongoose = require("mongoose");
 
-const adminDeviceSchema = new mongoose.Schema(
+const AdminDeviceSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      index: true,
       required: true,
+    },
+    barberId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Barber",
+      default: null,
       index: true,
     },
     token: {
       type: String,
       required: true,
       unique: true,
-    },
-    platform: {
-      type: String,
-      enum: ["web", "android", "ios"],
-      default: "web",
+      index: true,
     },
     enabled: {
       type: Boolean,
       default: true,
+    },
+    isMainAdmin: {
+      type: Boolean,
+      default: false,
+    },
+    role: {
+      type: String,
+      default: "admin",
+    },
+    platform: {
+      type: String,
+      default: "web",
     },
     lastSeenAt: {
       type: Date,
@@ -31,4 +44,6 @@ const adminDeviceSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-module.exports = mongoose.model("AdminDevice", adminDeviceSchema);
+module.exports =
+  mongoose.models.AdminDevice ||
+  mongoose.model("AdminDevice", AdminDeviceSchema);
