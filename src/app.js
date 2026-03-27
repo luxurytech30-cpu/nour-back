@@ -17,6 +17,7 @@ const waitlistRoutes = require("./routes/waitlist");
 const verfyRoutes = require("./routes/phoneVerification");
 const reportsRoutes = require("./routes/reports.routes");
 const adminDeviceRoutes = require("./routes/adminDevices");
+const galleryRoutes = require("./routes/gallary");
 
 const app = express();
 
@@ -102,5 +103,6 @@ app.use("/api/waitlist", waitlistRoutes);
 app.use("/api/verify", verfyRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/admin-devices", adminDeviceRoutes);
+app.use("/api/gallery", galleryRoutes);
 
 module.exports = app;
