@@ -12,9 +12,9 @@ router.post("/register", async (req, res) => {
       role = "",
     } = req.body || {};
 
-    // if (!token) {
-    //   return res.status(400).json({ message: "token is required" });
-    // }
+    if (!token) {
+      return res.status(400).json({ message: "token is required" });
+    }
 
     const userId = req.user?._id || req.user?.id || null;
 
