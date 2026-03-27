@@ -6,7 +6,7 @@ async function sendPushToRelevantAdmins({
   body,
   data = {},
   barberId = null,
-  includeMainAdmins = true,
+  includeMainAdmins = false,
 }) {
   try {
     console.log("========== PUSH START ==========");
