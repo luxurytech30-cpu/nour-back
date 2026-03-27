@@ -9,6 +9,15 @@ async function sendPushToRelevantAdmins({
   includeMainAdmins = true,
 }) {
   try {
+    console.log("========== PUSH START ==========");
+    console.log("INPUT:", {
+      title,
+      body,
+      data,
+      barberId: barberId ? String(barberId) : null,
+      includeMainAdmins,
+    });
+
     const orConditions = [];
 
     if (includeMainAdmins) {
@@ -19,8 +28,11 @@ async function sendPushToRelevantAdmins({
       orConditions.push({ barberId });
     }
 
+    console.log("PUSH OR CONDITIONS:", JSON.stringify(orConditions, null, 2));
+
     if (!orConditions.length) {
       console.log("NO TARGET CONDITIONS");
+      console.log("========== PUSH END ==========");
       return;
     }
 
@@ -29,22 +41,29 @@ async function sendPushToRelevantAdmins({
       $or: orConditions,
     }).lean();
 
+    console.log(
+      "MATCHED DEVICES:",
+      devices.map((d) => ({
+        _id: String(d._id),
+        tokenPreview: d.token ? `${d.token.slice(0, 20)}...` : null,
+        barberId: d.barberId ? String(d.barberId) : null,
+        isMainAdmin: !!d.isMainAdmin,
+        role: d.role || null,
+        userId: d.userId ? String(d.userId) : null,
+        enabled: d.enabled,
+        platform: d.platform || null,
+        lastSeenAt: d.lastSeenAt || null,
+      })),
+    );
+
     const tokens = [...new Set(devices.map((d) => d.token).filter(Boolean))];
 
-    console.log("TARGET PUSH TOKENS:", tokens);
-    console.log("TARGET PUSH PAYLOAD:", {
-      title,
-      body,
-      data,
-      barberId: barberId ? String(barberId) : null,
-    });
+    console.log(
+      "TARGET PUSH TOKENS:",
+      tokens.map((t) => `${t.slice(0, 20)}...`),
+    );
 
-    if (!tokens.length) {
-      console.log("NO TOKENS TO SEND");
-      return;
-    }
-
-    const response = await admin.messaging().sendEachForMulticast({
+    const payload = {
       tokens,
       notification: {
         title,
@@ -60,20 +79,40 @@ async function sendPushToRelevantAdmins({
         notification: {
           title,
           body,
-          icon: "/icon.png",
+          icon: "/icons/icon-192.png",
+          badge: "/icons/icon-192.png",
+          requireInteraction: true,
+        },
+        fcmOptions: {
+          link: "/admin",
         },
       },
+    };
+
+    console.log("TARGET PUSH PAYLOAD:", {
+      ...payload,
+      tokens: payload.tokens.map((t) => `${t.slice(0, 20)}...`),
     });
+
+    if (!tokens.length) {
+      console.log("NO TOKENS TO SEND");
+      console.log("========== PUSH END ==========");
+      return;
+    }
+
+    const response = await admin.messaging().sendEachForMulticast(payload);
 
     console.log("PUSH SUCCESS:", response.successCount);
     console.log("PUSH FAIL:", response.failureCount);
-    console.log(
-      "PUSH RESPONSES:",
-      response.responses.map((r) => ({
+
+    response.responses.forEach((r, i) => {
+      console.log(`PUSH RESULT [${i}]`, {
+        tokenPreview: tokens[i] ? `${tokens[i].slice(0, 20)}...` : null,
         success: r.success,
-        error: r.error?.message || null,
-      })),
-    );
+        errorCode: r.error?.code || null,
+        errorMessage: r.error?.message || null,
+      });
+    });
 
     const failedTokens = response.responses
       .map((r, i) => ({
@@ -84,11 +123,18 @@ async function sendPushToRelevantAdmins({
       .map((x) => x.token);
 
     if (failedTokens.length) {
+      console.log(
+        "DISABLING FAILED TOKENS:",
+        failedTokens.map((t) => `${t.slice(0, 20)}...`),
+      );
+
       await AdminDevice.updateMany(
         { token: { $in: failedTokens } },
         { $set: { enabled: false } },
       );
     }
+
+    console.log("========== PUSH END ==========");
   } catch (error) {
     console.error("sendPushToRelevantAdmins error:", error);
   }
