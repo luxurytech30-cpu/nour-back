@@ -1,8 +1,8 @@
 const router = require("express").Router();
 const AdminDevice = require("../models/AdminDevice");
-const { requireAuth } = require("../middleware/requireAuth");
+// const { requireAuth } = require("../middleware/requireAuth");
 
-router.post("/register", requireAuth, async (req, res) => {
+router.post("/register", async (req, res) => {
   try {
     const {
       token,
@@ -12,9 +12,9 @@ router.post("/register", requireAuth, async (req, res) => {
       role = "",
     } = req.body || {};
 
-    if (!token) {
-      return res.status(400).json({ message: "token is required" });
-    }
+    // if (!token) {
+    //   return res.status(400).json({ message: "token is required" });
+    // }
 
     const userId = req.user?._id || req.user?.id || null;
 
