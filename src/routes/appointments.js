@@ -81,7 +81,30 @@ function getDateOnlyFromStartAt(startAt) {
   if (!startAt) return "";
   return new Date(startAt).toISOString().slice(0, 10);
 }
+function isSameLocalDay(a, b) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
 
+function getPushDateLabel(startAt) {
+  const start = new Date(startAt);
+  const now = new Date();
+
+  if (Number.isNaN(start.getTime())) return "";
+
+  if (isSameLocalDay(start, now)) {
+    return "היום";
+  }
+
+  return start.toLocaleDateString("he-IL", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
 function triggerWaitlistForAppointment(appointment) {
   const barberId =
     typeof appointment?.barberId === "object"
@@ -117,18 +140,36 @@ function buildDayRange(date) {
   const dayEnd = new Date(`${date}T23:59:59.999`);
   return { dayStart, dayEnd };
 }
-
 async function validateBarberScheduleOrFail(barberId, startAt, endAt) {
   const barber = await Barber.findById(barberId).lean();
+
+  console.log("=== validateBarberScheduleOrFail ===");
+  console.log("barberId:", barberId);
+  console.log("startAt arg:", startAt);
+  console.log("endAt arg:", endAt);
+  console.log("startAt iso:", new Date(startAt).toISOString());
+  console.log("endAt iso:", new Date(endAt).toISOString());
+  console.log("barber found:", !!barber);
+
   if (!barber) {
+    console.log("validateBarberScheduleOrFail -> Barber not found");
     return { ok: false, status: 404, message: "Barber not found" };
   }
+
+  console.log("barber weeklyHours:", barber.weeklyHours);
+  console.log("barber hours:", barber.hours);
+  console.log("barber dateOverrides:", barber.dateOverrides);
+  console.log("barber overrides:", barber.overrides);
+  console.log("barber weeklyBreaks:", barber.weeklyBreaks);
+  console.log("barber breaks:", barber.breaks);
 
   const scheduleCheck = validateAppointmentAgainstSchedule(
     barber,
     new Date(startAt),
     new Date(endAt),
   );
+
+  console.log("validateAppointmentAgainstSchedule result:", scheduleCheck);
 
   if (!scheduleCheck.ok) {
     return { ok: false, status: 400, message: scheduleCheck.message };
@@ -138,9 +179,11 @@ async function validateBarberScheduleOrFail(barberId, startAt, endAt) {
 }
 
 async function findOverlap({ barberId, startAt, endAt, excludeId = null }) {
+  const BLOCKING_STATUSES = ["active", "in_service", "checked_in"];
+
   const query = {
     barberId,
-    status: { $ne: "cancelled" },
+    status: { $in: BLOCKING_STATUSES },
     startAt: { $lt: endAt },
     endAt: { $gt: startAt },
   };
@@ -149,7 +192,17 @@ async function findOverlap({ barberId, startAt, endAt, excludeId = null }) {
     query._id = { $ne: excludeId };
   }
 
-  return Appointment.findOne(query).lean();
+  console.log("=== findOverlap ===");
+  console.log("barberId:", barberId);
+  console.log("startAt:", startAt);
+  console.log("endAt:", endAt);
+  console.log("BLOCKING_STATUSES:", BLOCKING_STATUSES);
+  console.log("query:", query);
+
+  const overlap = await Appointment.findOne(query).lean();
+  console.log("overlap found:", overlap);
+
+  return overlap;
 }
 
 async function notifyAppointmentCreated(appointment) {
@@ -184,15 +237,20 @@ async function notifyAppointmentCreated(appointment) {
 שעה: ${time}
 קוד הזמנה: ${bookingCode}`;
 
-    await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
+    // await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
+
+    const pushDateLabel = getPushDateLabel(appointment.startAt);
 
     await sendPushToRelevantAdmins({
       title: "תור חדש נקבע",
-      body: `${customerName} • ${barberName} • ${service} • ${time}`,
+      body: `${customerName} • ${barberName} • ${service} • ${pushDateLabel} • ${time}`,
       barberId,
       data: {
         type: "appointment_created",
         appointmentId: String(appointment._id),
+        startAt: appointment.startAt,
+        dateLabel: pushDateLabel,
+        time,
       },
     });
 
@@ -237,15 +295,20 @@ async function notifyAppointmentUpdated(appointment) {
 שעה: ${time}
 קוד הזמנה: ${bookingCode}`;
 
-    await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
+    // await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
+
+    const pushDateLabel = getPushDateLabel(appointment.startAt);
 
     await sendPushToRelevantAdmins({
       title: "תור עודכן",
-      body: `${customerName} • ${barberName} • ${service} • ${time}`,
+      body: `${customerName} • ${barberName} • ${service} • ${pushDateLabel} • ${time}`,
       barberId,
       data: {
         type: "appointment_updated",
         appointmentId: String(appointment._id),
+        startAt: appointment.startAt,
+        dateLabel: pushDateLabel,
+        time,
       },
     });
 
@@ -289,15 +352,20 @@ async function notifyAppointmentCancelled(appointment) {
 שעה: ${time}
 קוד הזמנה: ${bookingCode}`;
 
-    await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
+    // await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
+
+    const pushDateLabel = getPushDateLabel(appointment.startAt);
 
     await sendPushToRelevantAdmins({
       title: "תור התבטל",
-      body: `${customerName} • ${barberName} • ${service} • ${time}`,
+      body: `${customerName} • ${barberName} • ${service} • ${pushDateLabel} • ${time}`,
       barberId,
       data: {
         type: "appointment_cancelled",
         appointmentId: String(appointment._id),
+        startAt: appointment.startAt,
+        dateLabel: pushDateLabel,
+        time,
       },
     });
 
@@ -341,18 +409,22 @@ async function notifyAppointmentDeleted(appointment) {
 שעה: ${time}
 קוד הזמנה: ${bookingCode}`;
 
-    await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
+    // await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
+
+    const pushDateLabel = getPushDateLabel(appointment.startAt);
 
     await sendPushToRelevantAdmins({
       title: "תור נמחק",
-      body: `${customerName} • ${barberName} • ${service} • ${time}`,
+      body: `${customerName} • ${barberName} • ${service} • ${pushDateLabel} • ${time}`,
       barberId,
       data: {
         type: "appointment_deleted",
         appointmentId: String(appointment._id),
+        startAt: appointment.startAt,
+        dateLabel: pushDateLabel,
+        time,
       },
     });
-
     if (customerPhone) {
       await sendWhatsAppToPhone(customerPhone, customerMessage);
     }
@@ -496,7 +568,25 @@ router.post("/", async (req, res) => {
 
     const s = new Date(finalStartAt);
     const e = new Date(finalEndAt);
-
+    console.log("=== POST /api/appointments ===");
+    console.log("raw body:", req.body);
+    console.log("finalBarberId:", finalBarberId);
+    console.log("finalStartAt raw:", finalStartAt);
+    console.log("finalEndAt raw:", finalEndAt);
+    console.log("parsed start date:", s);
+    console.log("parsed end date:", e);
+    console.log("start iso:", s.toISOString());
+    console.log("end iso:", e.toISOString());
+    console.log("start toString:", s.toString());
+    console.log("end toString:", e.toString());
+    console.log("start utc:", {
+      hour: s.getUTCHours(),
+      minute: s.getUTCMinutes(),
+    });
+    console.log("start local/server:", {
+      hour: s.getHours(),
+      minute: s.getMinutes(),
+    });
     if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) {
       return res.status(400).json({ message: "Invalid date format" });
     }
@@ -505,11 +595,19 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Invalid time range" });
     }
 
+    console.log("about to validate schedule", {
+      barberId: finalBarberId,
+      startIso: s.toISOString(),
+      endIso: e.toISOString(),
+    });
+
     const scheduleCheck = await validateBarberScheduleOrFail(
       finalBarberId,
       s,
       e,
     );
+
+    console.log("scheduleCheck result:", scheduleCheck);
 
     if (!scheduleCheck.ok) {
       return res
@@ -527,10 +625,16 @@ router.post("/", async (req, res) => {
       return res.status(409).json({ message: "Time already booked" });
     }
 
+    const ACTIVE_CUSTOMER_STATUSES = ["active", "checked_in", "in_service"];
+
     const existingActiveAppointmentQuery = {
-      status: { $nin: ["done", "cancelled", "no_show"] },
+      status: { $in: ACTIVE_CUSTOMER_STATUSES },
       $or: [],
     };
+
+    console.log("=== existingActiveAppointmentQuery ===");
+    console.log("ACTIVE_CUSTOMER_STATUSES:", ACTIVE_CUSTOMER_STATUSES);
+    console.log("query before $or fill:", existingActiveAppointmentQuery);
 
     if (customerId) {
       existingActiveAppointmentQuery.$or.push({ createdByUserId: customerId });
