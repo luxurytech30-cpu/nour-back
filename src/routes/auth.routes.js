@@ -16,11 +16,10 @@ function signToken(user) {
     { expiresIn: "7d" },
   );
 }
-
 router.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
-
+    console.log("Auth login attempt:", { username, password });
     const user = await User.findOne({ username });
     if (!user) {
       return res.status(401).json({ message: "שם משתמש או סיסמה שגויים" });

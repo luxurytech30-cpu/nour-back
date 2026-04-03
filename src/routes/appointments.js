@@ -785,7 +785,18 @@ router.patch("/public/:token", async (req, res) => {
     const nextStartAt = startAt
       ? new Date(startAt)
       : new Date(appointment.startAt);
-    const nextEndAt = endAt ? new Date(endAt) : new Date(appointment.endAt);
+    let nextEndAt = endAt ? new Date(endAt) : new Date(appointment.endAt);
+
+    if (!endAt && (startAt || barberId)) {
+      const barber = await Barber.findById(nextBarberId).lean();
+      if (!barber) {
+        return res.status(404).json({ message: "Barber not found" });
+      }
+
+      const slotMinutes = Number(barber.slotMinutes || 30);
+      nextEndAt = new Date(nextStartAt);
+      nextEndAt.setMinutes(nextEndAt.getMinutes() + slotMinutes);
+    }
 
     if (
       Number.isNaN(nextStartAt.getTime()) ||
