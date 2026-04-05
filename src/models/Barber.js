@@ -25,6 +25,7 @@ const BarberSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     phone: { type: String, default: "", trim: true },
     isActive: { type: Boolean, default: true },
+    sortOrder: { type: Number, default: 0 },
     image: {
       url: { type: String, default: "" },
       publicId: { type: String, default: "" },

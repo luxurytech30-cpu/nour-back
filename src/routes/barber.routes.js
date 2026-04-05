@@ -80,6 +80,7 @@ function pickBody(req) {
 
   if ("isActive" in b) b.isActive = toBool(b.isActive, true);
   if ("slotMinutes" in b) b.slotMinutes = toNum(b.slotMinutes, 30);
+  if ("sortOrder" in b) b.sortOrder = toNum(b.sortOrder, 0);
   if ("isMainAdmin" in b) b.isMainAdmin = toBool(b.isMainAdmin, false);
 
   if (typeof b.name === "string") b.name = b.name.trim();
@@ -101,7 +102,9 @@ router.get("/", async (req, res) => {
     if (!all) filter.isActive = true;
     if (activeOnly) filter.isActive = true;
 
-    const list = await Barber.find(filter).sort({ createdAt: -1 }).lean();
+    const list = await Barber.find(filter)
+      .sort({ sortOrder: 1, createdAt: 1 })
+      .lean();
 
     const barberIds = list.map((b) => b._id);
     const linkedUsers = await User.find({ barberId: { $in: barberIds } })
@@ -185,6 +188,7 @@ router.post(
         name: b.name,
         phone: b.phone || "",
         isActive: b.isActive ?? true,
+        sortOrder: b.sortOrder ?? 0,
         image: b.image || undefined,
         weeklyHours: b.weeklyHours || getDefaultWeeklyHours(),
         weeklyBreaks: b.weeklyBreaks || getDefaultWeeklyBreaks(),
@@ -268,6 +272,7 @@ router.patch(
       if (typeof b.name !== "undefined") barber.name = b.name;
       if (typeof b.phone !== "undefined") barber.phone = b.phone;
       if (typeof b.isActive !== "undefined") barber.isActive = b.isActive;
+      if (typeof b.sortOrder !== "undefined") barber.sortOrder = b.sortOrder;
       if (typeof b.slotMinutes !== "undefined")
         barber.slotMinutes = b.slotMinutes;
       if (typeof b.timezone !== "undefined") barber.timezone = b.timezone;
