@@ -1,5 +1,6 @@
 const router = require("express").Router();
 const AdminDevice = require("../models/AdminDevice");
+const User = require("../models/User");
 const { requireAuth } = require("../middleware/auth");
 
 router.post("/register", requireAuth, async (req, res) => {
@@ -8,7 +9,6 @@ router.post("/register", requireAuth, async (req, res) => {
       token,
       platform = "web",
       barberId = null,
-      isMainAdmin = false,
       role = "",
     } = req.body || {};
 
@@ -17,6 +17,16 @@ router.post("/register", requireAuth, async (req, res) => {
     }
 
     const userId = req.user?._id || req.user?.id || null;
+    const currentUser = userId ? await User.findById(userId).lean() : null;
+
+    if (!currentUser || currentUser.role !== "admin") {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    const currentBarberId = currentUser.barberId || null;
+    const targetBarberId = currentUser.isMainAdmin
+      ? barberId || currentBarberId
+      : currentBarberId;
 
     const doc = await AdminDevice.findOneAndUpdate(
       { token },
@@ -27,12 +37,9 @@ router.post("/register", requireAuth, async (req, res) => {
           enabled: true,
           lastSeenAt: new Date(),
           userId,
-          barberId: barberId || req.user?.barberId || null,
-          isMainAdmin:
-            typeof isMainAdmin === "boolean"
-              ? isMainAdmin
-              : !!req.user?.isMainAdmin,
-          role: role || req.user?.role || "",
+          barberId: targetBarberId,
+          isMainAdmin: !!currentUser.isMainAdmin,
+          role: currentUser.role || role || "",
         },
       },
       {

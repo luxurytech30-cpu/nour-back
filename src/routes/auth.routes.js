@@ -99,16 +99,21 @@ router.get("/me", async (req, res) => {
 
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded._id).lean();
+
+    if (!user) {
+      return res.json({ user: null });
+    }
 
     return res.json({
       user: {
-        _id: decoded._id,
-        name: decoded.name || "",
-        username: decoded.username || "",
-        phone: decoded.phone || "",
-        role: decoded.role || "user",
-        barberId: decoded.barberId || null,
-        isMainAdmin: !!decoded.isMainAdmin,
+        _id: String(user._id),
+        name: user.name || "",
+        username: user.username || "",
+        phone: user.phone || "",
+        role: user.role || "user",
+        barberId: user.barberId ? String(user.barberId) : null,
+        isMainAdmin: !!user.isMainAdmin,
       },
     });
   } catch (error) {
