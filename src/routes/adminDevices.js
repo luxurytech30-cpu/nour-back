@@ -2,13 +2,13 @@ const router = require("express").Router();
 const AdminDevice = require("../models/AdminDevice");
 const User = require("../models/User");
 const { requireAuth } = require("../middleware/auth");
+const { resolveUserBarberId } = require("../utils/resolveUserBarberId");
 
 router.post("/register", requireAuth, async (req, res) => {
   try {
     const {
       token,
       platform = "web",
-      barberId = null,
       role = "",
     } = req.body || {};
 
@@ -23,10 +23,7 @@ router.post("/register", requireAuth, async (req, res) => {
       return res.status(403).json({ message: "Admin access required" });
     }
 
-    const currentBarberId = currentUser.barberId || null;
-    const targetBarberId = currentUser.isMainAdmin
-      ? barberId || currentBarberId
-      : currentBarberId;
+    const targetBarberId = await resolveUserBarberId(currentUser);
 
     const doc = await AdminDevice.findOneAndUpdate(
       { token },

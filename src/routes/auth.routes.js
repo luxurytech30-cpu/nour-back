@@ -1,6 +1,8 @@
 const router = require("express").Router();
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const { resolveUserBarberId } = require("../utils/resolveUserBarberId");
+
 function signToken(user) {
   return jwt.sign(
     {
@@ -105,6 +107,8 @@ router.get("/me", async (req, res) => {
       return res.json({ user: null });
     }
 
+    const barberId = await resolveUserBarberId(user);
+
     return res.json({
       user: {
         _id: String(user._id),
@@ -112,7 +116,7 @@ router.get("/me", async (req, res) => {
         username: user.username || "",
         phone: user.phone || "",
         role: user.role || "user",
-        barberId: user.barberId ? String(user.barberId) : null,
+        barberId: barberId ? String(barberId) : null,
         isMainAdmin: !!user.isMainAdmin,
       },
     });
