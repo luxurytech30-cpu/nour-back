@@ -1,8 +1,8 @@
 const router = require("express").Router();
 const AdminDevice = require("../models/AdminDevice");
-// const { requireAuth } = require("../middleware/requireAuth");
+const { requireAuth } = require("../middleware/auth");
 
-router.post("/register", async (req, res) => {
+router.post("/register", requireAuth, async (req, res) => {
   try {
     const {
       token,
