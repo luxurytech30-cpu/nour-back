@@ -245,6 +245,7 @@ async function notifyAppointmentCreated(appointment) {
       title: "תור חדש נקבע",
       body: `${customerName} • ${barberName} • ${service} • ${pushDateLabel} • ${time}`,
       barberId,
+      includeMainAdmins: true,
       data: {
         type: "appointment_created",
         appointmentId: String(appointment._id),
@@ -303,6 +304,7 @@ async function notifyAppointmentUpdated(appointment) {
       title: "תור עודכן",
       body: `${customerName} • ${barberName} • ${service} • ${pushDateLabel} • ${time}`,
       barberId,
+      includeMainAdmins: true,
       data: {
         type: "appointment_updated",
         appointmentId: String(appointment._id),
@@ -360,6 +362,7 @@ async function notifyAppointmentCancelled(appointment) {
       title: "תור התבטל",
       body: `${customerName} • ${barberName} • ${service} • ${pushDateLabel} • ${time}`,
       barberId,
+      includeMainAdmins: true,
       data: {
         type: "appointment_cancelled",
         appointmentId: String(appointment._id),
@@ -417,6 +420,7 @@ async function notifyAppointmentDeleted(appointment) {
       title: "תור נמחק",
       body: `${customerName} • ${barberName} • ${service} • ${pushDateLabel} • ${time}`,
       barberId,
+      includeMainAdmins: true,
       data: {
         type: "appointment_deleted",
         appointmentId: String(appointment._id),
