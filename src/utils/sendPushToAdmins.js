@@ -1,4 +1,5 @@
 const AdminDevice = require("../models/AdminDevice");
+const User = require("../models/User");
 const admin = require("../config/firebaseAdmin");
 
 async function sendPushToRelevantAdmins({
@@ -24,11 +25,30 @@ async function sendPushToRelevantAdmins({
       orConditions.push({ isMainAdmin: true });
     }
 
+    let linkedBarberUserIds = [];
+
     if (barberId) {
       orConditions.push({ barberId });
+
+      const linkedUsers = await User.find({
+        role: "admin",
+        barberId,
+      })
+        .select("_id")
+        .lean();
+
+      linkedBarberUserIds = linkedUsers.map((user) => user._id);
+
+      if (linkedBarberUserIds.length) {
+        orConditions.push({ userId: { $in: linkedBarberUserIds } });
+      }
     }
 
     console.log("PUSH OR CONDITIONS:", JSON.stringify(orConditions, null, 2));
+    console.log(
+      "LINKED BARBER USER IDS:",
+      linkedBarberUserIds.map((id) => String(id)),
+    );
 
     if (!orConditions.length) {
       console.log("NO TARGET CONDITIONS");
@@ -40,6 +60,17 @@ async function sendPushToRelevantAdmins({
       enabled: true,
       $or: orConditions,
     }).lean();
+
+    if (barberId && linkedBarberUserIds.length) {
+      await AdminDevice.updateMany(
+        {
+          enabled: true,
+          userId: { $in: linkedBarberUserIds },
+          $or: [{ barberId: null }, { barberId: { $exists: false } }],
+        },
+        { $set: { barberId } },
+      );
+    }
 
     console.log(
       "MATCHED DEVICES:",
