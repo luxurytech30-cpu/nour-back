@@ -25,6 +25,16 @@ router.post("/register", requireAuth, async (req, res) => {
 
     const targetBarberId = await resolveUserBarberId(currentUser);
 
+    console.log("ADMIN DEVICE REGISTER:", {
+      userId: userId ? String(userId) : null,
+      username: currentUser.username || null,
+      userBarberId: currentUser.barberId ? String(currentUser.barberId) : null,
+      resolvedBarberId: targetBarberId ? String(targetBarberId) : null,
+      isMainAdmin: !!currentUser.isMainAdmin,
+      tokenPreview: token ? `${token.slice(0, 20)}...` : null,
+      platform,
+    });
+
     const doc = await AdminDevice.findOneAndUpdate(
       { token },
       {
@@ -45,6 +55,15 @@ router.post("/register", requireAuth, async (req, res) => {
         setDefaultsOnInsert: true,
       },
     );
+
+    console.log("ADMIN DEVICE SAVED:", {
+      deviceId: String(doc._id),
+      userId: doc.userId ? String(doc.userId) : null,
+      barberId: doc.barberId ? String(doc.barberId) : null,
+      enabled: doc.enabled,
+      tokenPreview: doc.token ? `${doc.token.slice(0, 20)}...` : null,
+      updatedAt: doc.updatedAt,
+    });
 
     res.json({ ok: true, doc });
   } catch (error) {
