@@ -1,4 +1,5 @@
 const router = require("express").Router();
+const mongoose = require("mongoose");
 const AdminDevice = require("../models/AdminDevice");
 const User = require("../models/User");
 const { requireAuth } = require("../middleware/auth");
@@ -8,6 +9,7 @@ router.post("/register", requireAuth, async (req, res) => {
   try {
     const {
       token,
+      barberId: bodyBarberId = null,
       platform = "web",
       role = "",
     } = req.body || {};
@@ -23,13 +25,19 @@ router.post("/register", requireAuth, async (req, res) => {
       return res.status(403).json({ message: "Admin access required" });
     }
 
-    const targetBarberId = await resolveUserBarberId(currentUser);
+    const resolvedBarberId = await resolveUserBarberId(currentUser);
+    const targetBarberId =
+      currentUser.barberId ||
+      resolvedBarberId ||
+      (mongoose.isValidObjectId(bodyBarberId) ? bodyBarberId : null);
 
     console.log("ADMIN DEVICE REGISTER:", {
       userId: userId ? String(userId) : null,
       username: currentUser.username || null,
       userBarberId: currentUser.barberId ? String(currentUser.barberId) : null,
-      resolvedBarberId: targetBarberId ? String(targetBarberId) : null,
+      bodyBarberId,
+      resolvedBarberId: resolvedBarberId ? String(resolvedBarberId) : null,
+      targetBarberId: targetBarberId ? String(targetBarberId) : null,
       isMainAdmin: !!currentUser.isMainAdmin,
       tokenPreview: token ? `${token.slice(0, 20)}...` : null,
       platform,
@@ -51,7 +59,7 @@ router.post("/register", requireAuth, async (req, res) => {
       },
       {
         upsert: true,
-        new: true,
+        returnDocument: "after",
         setDefaultsOnInsert: true,
       },
     );

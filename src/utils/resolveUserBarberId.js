@@ -6,10 +6,7 @@ async function resolveUserBarberId(user) {
   if (!user) return null;
 
   if (user.barberId) {
-    const linkedBarber = await Barber.findById(user.barberId)
-      .select("_id")
-      .lean();
-    if (linkedBarber?._id) return linkedBarber._id;
+    return user.barberId;
   }
 
   const userPhone = normalizeIsraeliPhone(user.phone);
