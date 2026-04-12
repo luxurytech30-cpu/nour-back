@@ -72,11 +72,15 @@ const AppointmentSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+
+    customerReminderSentAt: { type: Date, default: null },
+    customerReminderForStartAt: { type: Date, default: null },
   },
   { timestamps: true },
 );
 
 AppointmentSchema.index({ barberId: 1, startAt: 1 });
 AppointmentSchema.index({ barberId: 1, startAt: 1, endAt: 1 });
+AppointmentSchema.index({ status: 1, startAt: 1, customerReminderForStartAt: 1 });
 
 module.exports = mongoose.model("Appointment", AppointmentSchema);
