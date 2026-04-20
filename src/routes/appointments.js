@@ -237,7 +237,13 @@ async function notifyAppointmentCreated(appointment) {
 שעה: ${time}
 קוד הזמנה: ${bookingCode}`;
 
-    // await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
+    if (ADMIN_WHATSAPP_PHONE) {
+      try {
+        await sendWhatsAppToPhone(ADMIN_WHATSAPP_PHONE, adminMessage);
+      } catch (err) {
+        console.error("admin WhatsApp (created) failed:", err.message);
+      }
+    }
 
     const pushDateLabel = getPushDateLabel(appointment.startAt);
 
