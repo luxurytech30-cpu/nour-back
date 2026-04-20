@@ -1,14 +1,12 @@
 const router = require("express").Router();
 const crypto = require("crypto");
 const VerificationCode = require("../models/VerificationCode.js");
+const Customer = require("../models/Customer.js");
 const { sendWhatsAppMessage } = require("../utils/sendMessageWa.js");
-
-function normalizeIsraeliPhone(phone) {
-  const digits = String(phone || "").replace(/\D/g, "");
-  if (digits.startsWith("972")) return digits;
-  if (digits.startsWith("0")) return `972${digits.slice(1)}`;
-  return digits;
-}
+const {
+  normalizeCustomerPhone,
+  upsertCustomer,
+} = require("../utils/customerStore.js");
 
 function generateCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -30,9 +28,32 @@ router.post("/send", async (req, res) => {
       return res.status(400).json({ message: "Phone is required" });
     }
 
-    const normalizedPhone = normalizeIsraeliPhone(phone);
+    const normalizedPhone = normalizeCustomerPhone(phone);
     if (!normalizedPhone || normalizedPhone.length < 11) {
       return res.status(400).json({ message: "Invalid phone" });
+    }
+
+    const trustedCustomer = await Customer.findOne({
+      normalizedPhone,
+      trusted: true,
+    }).lean();
+
+    if (trustedCustomer) {
+      await upsertCustomer({
+        name: trustedCustomer.name || name,
+        phone,
+        trusted: true,
+        source: trustedCustomer.source || "manual",
+        verifiedAt: new Date(),
+        preserveExistingName: true,
+      });
+
+      return res.json({
+        success: true,
+        verified: true,
+        trusted: true,
+        message: "Customer already authorized",
+      });
     }
 
     const code = generateCode();
@@ -93,6 +114,14 @@ router.post("/verify", async (req, res) => {
     row.isUsed = true;
     row.usedAt = new Date();
     await row.save();
+
+    await upsertCustomer({
+      name: row.name || "",
+      phone: normalizedPhone,
+      trusted: true,
+      source: "otp",
+      verifiedAt: new Date(),
+    });
 
     return res.json({ success: true, verified: true });
   } catch (e) {

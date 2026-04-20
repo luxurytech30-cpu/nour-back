@@ -2,7 +2,8 @@ const router = require("express").Router();
 const crypto = require("crypto");
 const Appointment = require("../models/Appointment");
 const Barber = require("../models/Barber");
-const { requireAuth } = require("../middleware/auth");
+const Customer = require("../models/Customer");
+const { requireAuth, optionalAuth } = require("../middleware/auth");
 const { validateAppointmentAgainstSchedule } = require("../utils/schedule");
 const {
   sendWhatsAppToPhone,
@@ -10,6 +11,10 @@ const {
 } = require("../utils/sendMessageWa");
 const { processWaitlistForBarberDate } = require("../utils/processWaitlist");
 const { sendPushToRelevantAdmins } = require("../utils/sendPushToAdmins");
+const {
+  normalizeCustomerPhone,
+  upsertCustomer,
+} = require("../utils/customerStore");
 
 console.log("✅ appointments routes file loaded");
 
@@ -22,6 +27,24 @@ function generateManageToken() {
 
 function generateBookingCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function serializePublicAppointment(appointment) {
+  return {
+    _id: appointment._id,
+    barberId: appointment.barberId,
+    startAt: appointment.startAt,
+    endAt: appointment.endAt,
+    customerName: appointment.customerName,
+    phone: appointment.phone,
+    service: appointment.service,
+    notes: appointment.notes,
+    status: appointment.status,
+    bookingCode: appointment.bookingCode,
+    manageToken: appointment.manageToken,
+    canManage: canClientManageAppointment(appointment),
+    cutoffMinutes: appointment.clientEditCutoffMinutes,
+  };
 }
 
 function formatAppointmentDateTime(startAt, endAt) {
@@ -179,7 +202,7 @@ async function validateBarberScheduleOrFail(barberId, startAt, endAt) {
 }
 
 async function findOverlap({ barberId, startAt, endAt, excludeId = null }) {
-  const BLOCKING_STATUSES = ["active", "in_service", "checked_in"];
+  const BLOCKING_STATUSES = ["booked", "in_service", "checked_in"];
 
   const query = {
     barberId,
@@ -509,7 +532,7 @@ router.get("/", requireAuth, async (req, res) => {
 });
 
 // POST /api/appointments
-router.post("/", async (req, res) => {
+router.post("/", optionalAuth, async (req, res) => {
   try {
     const {
       barberId,
@@ -531,6 +554,7 @@ router.post("/", async (req, res) => {
     let finalCustomerName = customerName ? String(customerName).trim() : "";
     let finalPhone = phone ? String(phone).trim() : "";
     let finalService = service ? String(service).trim() : "";
+    let finalNormalizedPhone = "";
 
     if (!finalStartAt && !finalEndAt && date && time && finalBarberId) {
       const start = new Date(`${date}T${time}:00`);
@@ -575,6 +599,8 @@ router.post("/", async (req, res) => {
     if (!finalPhone) {
       return res.status(400).json({ message: "phone is required" });
     }
+
+    finalNormalizedPhone = normalizeCustomerPhone(finalPhone);
 
     const s = new Date(finalStartAt);
     const e = new Date(finalEndAt);
@@ -635,10 +661,11 @@ router.post("/", async (req, res) => {
       return res.status(409).json({ message: "Time already booked" });
     }
 
-    const ACTIVE_CUSTOMER_STATUSES = ["active", "checked_in", "in_service"];
+    const ACTIVE_CUSTOMER_STATUSES = ["booked", "checked_in", "in_service"];
 
     const existingActiveAppointmentQuery = {
       status: { $in: ACTIVE_CUSTOMER_STATUSES },
+      startAt: { $gte: new Date() },
       $or: [],
     };
 
@@ -652,6 +679,12 @@ router.post("/", async (req, res) => {
 
     if (finalPhone) {
       existingActiveAppointmentQuery.$or.push({ phone: finalPhone });
+    }
+
+    if (finalNormalizedPhone) {
+      existingActiveAppointmentQuery.$or.push({
+        normalizedPhone: finalNormalizedPhone,
+      });
     }
 
     if (!existingActiveAppointmentQuery.$or.length) {
@@ -675,6 +708,7 @@ router.post("/", async (req, res) => {
       endAt: e,
       customerName: finalCustomerName,
       phone: finalPhone,
+      normalizedPhone: finalNormalizedPhone,
       service: finalService,
       notes: notes ? String(notes).trim() : "",
       status: "booked",
@@ -683,6 +717,14 @@ router.post("/", async (req, res) => {
       clientCanEdit: true,
       clientEditCutoffMinutes: 180,
       createdByUserId: req.user?._id || customerId || null,
+    });
+
+    await upsertCustomer({
+      name: finalCustomerName,
+      phone: finalPhone,
+      trusted: isAdmin(req),
+      source: isAdmin(req) ? "admin" : "appointment",
+      verifiedAt: isAdmin(req) ? new Date() : null,
     });
 
     notifyAppointmentCreated(appointment).catch((err) =>
@@ -701,6 +743,59 @@ router.post("/", async (req, res) => {
   }
 });
 
+// GET /api/appointments/public/latest?phone=05...
+router.get("/public/latest", async (req, res) => {
+  try {
+    const normalizedPhone = normalizeCustomerPhone(req.query.phone);
+    if (!normalizedPhone) {
+      return res.json({ trusted: false, appointment: null });
+    }
+
+    const customer = await Customer.findOne({
+      normalizedPhone,
+      trusted: true,
+    }).lean();
+
+    if (!customer) {
+      return res.json({ trusted: false, appointment: null });
+    }
+
+    const activeStatuses = ["booked", "checked_in", "in_service"];
+    const now = new Date();
+
+    let appointment = await Appointment.findOne({
+      normalizedPhone,
+      status: { $in: activeStatuses },
+      startAt: { $gte: now },
+    })
+      .sort({ startAt: 1 })
+      .populate("barberId", "name");
+
+    if (!appointment) {
+      appointment = await Appointment.findOne({
+        normalizedPhone,
+        status: { $in: activeStatuses },
+      })
+        .sort({ startAt: -1 })
+        .populate("barberId", "name");
+    }
+
+    return res.json({
+      trusted: true,
+      customer: {
+        _id: String(customer._id),
+        name: customer.name || "",
+        phone: customer.phone || "",
+        normalizedPhone: customer.normalizedPhone || "",
+      },
+      appointment: appointment ? serializePublicAppointment(appointment) : null,
+    });
+  } catch (err) {
+    console.error("GET LATEST PUBLIC APPOINTMENT ERROR:", err);
+    return res.status(500).json({ message: "Failed to load appointment" });
+  }
+});
+
 // GET /api/appointments/public/:token
 router.get("/public/:token", async (req, res) => {
   try {
@@ -712,20 +807,7 @@ router.get("/public/:token", async (req, res) => {
       return res.status(404).json({ message: "Appointment not found" });
     }
 
-    return res.json({
-      _id: appointment._id,
-      barberId: appointment.barberId,
-      startAt: appointment.startAt,
-      endAt: appointment.endAt,
-      customerName: appointment.customerName,
-      phone: appointment.phone,
-      service: appointment.service,
-      notes: appointment.notes,
-      status: appointment.status,
-      bookingCode: appointment.bookingCode,
-      canManage: canClientManageAppointment(appointment),
-      cutoffMinutes: appointment.clientEditCutoffMinutes,
-    });
+    return res.json(serializePublicAppointment(appointment));
   } catch (err) {
     console.error("GET PUBLIC APPOINTMENT ERROR:", err);
     res.status(500).json({ message: "Failed to load appointment" });
@@ -848,8 +930,18 @@ router.patch("/public/:token", async (req, res) => {
     appointment.notes = notes ?? appointment.notes;
     appointment.customerName = customerName ?? appointment.customerName;
     appointment.phone = phone ?? appointment.phone;
+    appointment.normalizedPhone = normalizeCustomerPhone(appointment.phone);
 
     await appointment.save();
+
+    if (appointment.phone) {
+      await upsertCustomer({
+        name: appointment.customerName,
+        phone: appointment.phone,
+        trusted: false,
+        source: "appointment",
+      });
+    }
 
     notifyAppointmentUpdated(appointment).catch((err) =>
       console.error("notifyAppointmentUpdated error:", err.message),
@@ -919,6 +1011,8 @@ router.patch("/:id", requireAuth, async (req, res) => {
       appt[k] = req.body[k];
     }
 
+    appt.normalizedPhone = normalizeCustomerPhone(appt.phone);
+
     appt.startAt = new Date(appt.startAt);
     appt.endAt = new Date(appt.endAt);
 
@@ -958,6 +1052,16 @@ router.patch("/:id", requireAuth, async (req, res) => {
     }
 
     await appt.save();
+
+    if (admin && appt.phone) {
+      await upsertCustomer({
+        name: appt.customerName,
+        phone: appt.phone,
+        trusted: true,
+        source: "admin",
+        verifiedAt: new Date(),
+      });
+    }
 
     notifyAppointmentUpdated(appt).catch((err) =>
       console.error("notifyAppointmentUpdated error:", err.message),

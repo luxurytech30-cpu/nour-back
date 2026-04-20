@@ -14,6 +14,7 @@ const AppointmentSchema = new mongoose.Schema(
 
     customerName: { type: String, required: true, trim: true },
     phone: { type: String, default: "", trim: true },
+    normalizedPhone: { type: String, default: "", index: true },
 
     service: { type: String, default: "" },
     notes: { type: String, default: "" },
@@ -82,5 +83,6 @@ const AppointmentSchema = new mongoose.Schema(
 AppointmentSchema.index({ barberId: 1, startAt: 1 });
 AppointmentSchema.index({ barberId: 1, startAt: 1, endAt: 1 });
 AppointmentSchema.index({ status: 1, startAt: 1, customerReminderForStartAt: 1 });
+AppointmentSchema.index({ normalizedPhone: 1, startAt: -1 });
 
 module.exports = mongoose.model("Appointment", AppointmentSchema);

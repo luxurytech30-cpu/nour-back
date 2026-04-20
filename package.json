@@ -6,7 +6,11 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "import:customers": "node scripts/importCustomersFromPdf.js",
+    "import:customers:xlsx": "node scripts/importCustomersFromXlsx.js",
+    "backfill:appointment-customers": "node scripts/backfillAppointmentCustomers.js",
+    "backfill:customer-keys": "node scripts/backfillCustomerKeys.js"
   },
   "keywords": [],
   "author": "",
