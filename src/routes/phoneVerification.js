@@ -1,8 +1,7 @@
 const router = require("express").Router();
-const crypto = require("crypto");
 const VerificationCode = require("../models/VerificationCode.js");
 const Customer = require("../models/Customer.js");
-const { sendWhatsAppMessage } = require("../utils/sendMessageWa.js");
+const { sendWhatsAppToPhone } = require("../utils/sendMessageWa.js");
 const {
   normalizeCustomerPhone,
   upsertCustomer,
@@ -67,12 +66,12 @@ router.post("/send", async (req, res) => {
       isUsed: false,
     });
 
-    const chatId = `${normalizedPhone}@c.us`;
-
-    await sendWhatsAppMessage(
-      chatId,
+    const sendResult = await sendWhatsAppToPhone(
+      normalizedPhone,
       `שלום ${String(name).trim()}, קוד האימות שלך הוא: ${code}\nהקוד תקף ל-10 דקות.`,
     );
+
+    console.log("OTP WhatsApp send result:", sendResult);
 
     return res.json({ success: true, message: "Code sent" });
   } catch (e) {
@@ -93,9 +92,10 @@ router.post("/verify", async (req, res) => {
       return res.status(400).json({ message: "Phone and code are required" });
     }
 
-    const normalizedPhone = String(phone).replace(/\D/g, "").startsWith("972")
-      ? String(phone).replace(/\D/g, "")
-      : `972${String(phone).replace(/\D/g, "").replace(/^0/, "")}`;
+    const normalizedPhone = normalizeCustomerPhone(phone);
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: "Invalid phone" });
+    }
 
     const row = await VerificationCode.findOne({
       phone: normalizedPhone,
