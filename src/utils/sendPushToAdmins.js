@@ -145,17 +145,26 @@ async function sendPushToRelevantAdmins({
       });
     });
 
+    const permanentTokenErrorCodes = new Set([
+      "messaging/registration-token-not-registered",
+      "messaging/invalid-registration-token",
+      "messaging/invalid-argument",
+    ]);
+
     const failedTokens = response.responses
       .map((r, i) => ({
         success: r.success,
         token: tokens[i],
+        errorCode: r.error?.code || "",
       }))
-      .filter((x) => !x.success)
+      .filter(
+        (x) => !x.success && permanentTokenErrorCodes.has(x.errorCode),
+      )
       .map((x) => x.token);
 
     if (failedTokens.length) {
       console.log(
-        "DISABLING FAILED TOKENS:",
+        "DISABLING INVALID TOKENS:",
         failedTokens.map((t) => `${t.slice(0, 20)}...`),
       );
 
