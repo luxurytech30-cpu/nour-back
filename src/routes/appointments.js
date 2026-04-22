@@ -763,22 +763,13 @@ router.get("/public/latest", async (req, res) => {
     const activeStatuses = ["booked", "checked_in", "in_service"];
     const now = new Date();
 
-    let appointment = await Appointment.findOne({
+    const appointment = await Appointment.findOne({
       normalizedPhone,
       status: { $in: activeStatuses },
-      startAt: { $gte: now },
+      endAt: { $gt: now },
     })
       .sort({ startAt: 1 })
       .populate("barberId", "name");
-
-    if (!appointment) {
-      appointment = await Appointment.findOne({
-        normalizedPhone,
-        status: { $in: activeStatuses },
-      })
-        .sort({ startAt: -1 })
-        .populate("barberId", "name");
-    }
 
     return res.json({
       trusted: true,

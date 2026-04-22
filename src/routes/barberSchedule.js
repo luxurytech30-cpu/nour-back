@@ -49,7 +49,7 @@ function getDefaultWeeklyHours() {
     3: [{ start: "09:00", end: "18:00" }],
     4: [{ start: "09:00", end: "18:00" }],
     5: [{ start: "09:00", end: "14:00" }],
-    6: [],
+    6: [{ start: "09:00", end: "18:00" }],
   };
 }
 
@@ -61,7 +61,7 @@ function getDefaultWeeklyBreaks() {
     3: [{ start: "13:00", end: "13:30" }],
     4: [{ start: "13:00", end: "13:30" }],
     5: [],
-    6: [],
+    6: [{ start: "13:00", end: "13:30" }],
   };
 }
 
