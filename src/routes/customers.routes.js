@@ -7,6 +7,7 @@ const {
   normalizeCustomerPhone,
   upsertCustomer,
 } = require("../utils/customerStore");
+const { sendWhatsAppToPhone } = require("../utils/sendMessageWa");
 
 function serializeCustomer(customer) {
   return {
@@ -118,5 +119,70 @@ router.post("/import", requireAuth, requireAdmin, async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 });
+
+router.post(
+  "/broadcast-whatsapp",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const message = String(req.body?.message || "").trim();
+      const trustedOnly = req.body?.trustedOnly !== false;
+
+      if (!message) {
+        return res.status(400).json({ message: "message is required" });
+      }
+
+      const filter = trustedOnly ? { trusted: true } : {};
+      const customers = await Customer.find(filter)
+        .select("name phone normalizedPhone trusted")
+        .lean();
+
+      const uniqueCustomers = customers.filter(
+        (customer) => normalizeCustomerPhone(customer.phone) || customer.normalizedPhone,
+      );
+
+      const results = await Promise.allSettled(
+        uniqueCustomers.map(async (customer) => {
+          await sendWhatsAppToPhone(
+            customer.normalizedPhone || customer.phone,
+            message,
+          );
+          return {
+            _id: String(customer._id),
+            name: customer.name || "",
+            phone: customer.phone || "",
+          };
+        }),
+      );
+
+      const sent = results.filter((result) => result.status === "fulfilled");
+      const failed = results
+        .map((result, index) => ({ result, customer: uniqueCustomers[index] }))
+        .filter((item) => item.result.status === "rejected")
+        .map((item) => ({
+          _id: String(item.customer._id),
+          name: item.customer.name || "",
+          phone: item.customer.phone || "",
+          error:
+            item.result.status === "rejected"
+              ? item.result.reason?.message || "Failed to send"
+              : "",
+        }));
+
+      return res.json({
+        ok: true,
+        trustedOnly,
+        total: uniqueCustomers.length,
+        sent: sent.length,
+        failed: failed.length,
+        failures: failed.slice(0, 20),
+      });
+    } catch (error) {
+      console.error("BROADCAST CUSTOMERS WHATSAPP ERROR:", error);
+      return res.status(500).json({ message: error.message });
+    }
+  },
+);
 
 module.exports = router;
