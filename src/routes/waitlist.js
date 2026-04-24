@@ -385,6 +385,11 @@ const {
   sendWhatsAppToPhone,
   normalizeIsraeliPhone,
 } = require("../utils/sendMessageWa");
+const { normalizeCustomerPhone } = require("../utils/customerStore");
+const {
+  BLOCKING_CUSTOMER_STATUSES,
+  buildCustomerFutureAppointmentQuery,
+} = require("../utils/appointmentRules");
 
 const ok = (data) => ({ success: true, data });
 const fail = (message) => ({ success: false, message });
@@ -642,19 +647,15 @@ router.post("/", async (req, res) => {
     }
 
     const cleanPhone = String(phone || "").trim();
+    const normalizedPhone = normalizeCustomerPhone(cleanPhone);
 
-    const existingActiveAppointmentQuery = {
-      status: { $nin: ["done", "cancelled", "no_show"] },
-      $or: [],
-    };
-
-    if (customerId) {
-      existingActiveAppointmentQuery.$or.push({ createdByUserId: customerId });
-    }
-
-    if (cleanPhone) {
-      existingActiveAppointmentQuery.$or.push({ phone: cleanPhone });
-    }
+    const existingActiveAppointmentQuery = buildCustomerFutureAppointmentQuery({
+      customerId,
+      phone: cleanPhone,
+      normalizedPhone,
+      now: new Date(),
+      statuses: BLOCKING_CUSTOMER_STATUSES,
+    });
 
     if (existingActiveAppointmentQuery.$or.length > 0) {
       const existingActiveAppointment = await Appointment.findOne(

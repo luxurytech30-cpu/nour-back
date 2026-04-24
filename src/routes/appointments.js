@@ -16,6 +16,12 @@ const {
   normalizeCustomerPhone,
   upsertCustomer,
 } = require("../utils/customerStore");
+const {
+  BLOCKING_BARBER_STATUSES,
+  BLOCKING_CUSTOMER_STATUSES,
+  buildBarberOverlapQuery,
+  buildCustomerFutureAppointmentQuery,
+} = require("../utils/appointmentRules");
 
 console.log("✅ appointments routes file loaded");
 
@@ -283,24 +289,18 @@ async function validateBarberScheduleOrFail(barberId, startAt, endAt) {
 }
 
 async function findOverlap({ barberId, startAt, endAt, excludeId = null }) {
-  const BLOCKING_STATUSES = ["booked", "in_service", "checked_in"];
-
-  const query = {
+  const query = buildBarberOverlapQuery({
     barberId,
-    status: { $in: BLOCKING_STATUSES },
-    startAt: { $lt: endAt },
-    endAt: { $gt: startAt },
-  };
-
-  if (excludeId) {
-    query._id = { $ne: excludeId };
-  }
+    startAt,
+    endAt,
+    excludeId,
+  });
 
   console.log("=== findOverlap ===");
   console.log("barberId:", barberId);
   console.log("startAt:", startAt);
   console.log("endAt:", endAt);
-  console.log("BLOCKING_STATUSES:", BLOCKING_STATUSES);
+  console.log("BLOCKING_STATUSES:", BLOCKING_BARBER_STATUSES);
   console.log("query:", query);
 
   const overlap = await Appointment.findOne(query).lean();
@@ -743,33 +743,17 @@ router.post("/", optionalAuth, async (req, res) => {
           throw createHttpError(409, "השעה הזו כבר נתפסה. בחר שעה אחרת.");
         }
 
-        const ACTIVE_CUSTOMER_STATUSES = ["booked", "checked_in", "in_service"];
-
-        const existingActiveAppointmentQuery = {
-          status: { $in: ACTIVE_CUSTOMER_STATUSES },
-          startAt: { $gte: new Date() },
-          $or: [],
-        };
+        const existingActiveAppointmentQuery = buildCustomerFutureAppointmentQuery({
+          customerId,
+          phone: finalPhone,
+          normalizedPhone: finalNormalizedPhone,
+          now: new Date(),
+          statuses: BLOCKING_CUSTOMER_STATUSES,
+        });
 
         console.log("=== existingActiveAppointmentQuery ===");
-        console.log("ACTIVE_CUSTOMER_STATUSES:", ACTIVE_CUSTOMER_STATUSES);
+        console.log("ACTIVE_CUSTOMER_STATUSES:", BLOCKING_CUSTOMER_STATUSES);
         console.log("query before $or fill:", existingActiveAppointmentQuery);
-
-        if (customerId) {
-          existingActiveAppointmentQuery.$or.push({
-            createdByUserId: customerId,
-          });
-        }
-
-        if (finalPhone) {
-          existingActiveAppointmentQuery.$or.push({ phone: finalPhone });
-        }
-
-        if (finalNormalizedPhone) {
-          existingActiveAppointmentQuery.$or.push({
-            normalizedPhone: finalNormalizedPhone,
-          });
-        }
 
         if (!existingActiveAppointmentQuery.$or.length) {
           throw createHttpError(400, "Missing customer identity");
