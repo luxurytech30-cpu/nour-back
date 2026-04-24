@@ -821,6 +821,8 @@ router.post("/", optionalAuth, async (req, res) => {
       appointmentId: appointment._id,
       bookingCode: appointment.bookingCode,
       manageToken: appointment.manageToken,
+      startAt: appointment.startAt,
+      endAt: appointment.endAt,
       message: "Appointment booked successfully",
     });
   } catch (e) {
