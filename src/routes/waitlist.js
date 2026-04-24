@@ -379,6 +379,7 @@ const Waitlist = require("../models/Waitlist");
 const Appointment = require("../models/Appointment");
 const Barber = require("../models/Barber");
 const Service = require("../models/Service");
+const BarberBookingLock = require("../models/BarberBookingLock");
 const { processWaitlistForBarberDate } = require("../utils/processWaitlist");
 const {
   sendWhatsAppToPhone,
@@ -408,6 +409,66 @@ function generateManageToken() {
 
 function generateBookingCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function createHttpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withBarberBookingLock(barberId, work) {
+  const normalizedBarberId =
+    typeof barberId === "object" && barberId?._id
+      ? String(barberId._id)
+      : String(barberId || "");
+
+  const ownerToken = crypto.randomBytes(16).toString("hex");
+  const startedAt = Date.now();
+
+  while (true) {
+    try {
+      await BarberBookingLock.create({
+        barberId: normalizedBarberId,
+        ownerToken,
+        expiresAt: new Date(Date.now() + 15000),
+      });
+      break;
+    } catch (error) {
+      if (error?.code !== 11000) {
+        throw error;
+      }
+
+      await BarberBookingLock.deleteOne({
+        barberId: normalizedBarberId,
+        expiresAt: { $lte: new Date() },
+      });
+
+      if (Date.now() - startedAt > 5000) {
+        throw createHttpError(
+          409,
+          "מישהו בדיוק תופס את התור הזה עכשיו. נסה שוב בעוד רגע.",
+        );
+      }
+
+      await sleep(80);
+    }
+  }
+
+  try {
+    return await work();
+  } finally {
+    await BarberBookingLock.deleteOne({
+      barberId: normalizedBarberId,
+      ownerToken,
+    }).catch((error) =>
+      console.error("Failed to release waitlist barber lock:", error.message),
+    );
+  }
 }
 
 function makeStartEnd(date, time, slotMinutes = 30) {
@@ -799,32 +860,34 @@ router.post("/:id/accept", async (req, res) => {
       slotMinutes,
     );
 
-    const alreadyBooked = await Appointment.findOne({
-      barberId: item.barberId,
-      status: { $ne: "cancelled" },
-      startAt: { $lt: endAt },
-      endAt: { $gt: startAt },
-    }).lean();
+    const appointment = await withBarberBookingLock(item.barberId, async () => {
+      const alreadyBooked = await Appointment.findOne({
+        barberId: item.barberId,
+        status: { $ne: "cancelled" },
+        startAt: { $lt: endAt },
+        endAt: { $gt: startAt },
+      }).lean();
 
-    if (alreadyBooked) {
-      return res.status(400).json(fail("This time is no longer available"));
-    }
+      if (alreadyBooked) {
+        throw createHttpError(400, "השעה הזו כבר לא זמינה.");
+      }
 
-    const appointment = await Appointment.create({
-      barberId: item.barberId,
-      startAt,
-      endAt,
-      customerName: item.customerName || "לקוח",
-      phone: item.phone || "",
-      service: service.name || "",
-      notes: item.notes || "",
-      status: "booked",
-      source: "waitlist",
-      manageToken: generateManageToken(),
-      bookingCode: generateBookingCode(),
-      clientCanEdit: true,
-      clientEditCutoffMinutes: 120,
-      createdByUserId: item.customerId || null,
+      return Appointment.create({
+        barberId: item.barberId,
+        startAt,
+        endAt,
+        customerName: item.customerName || "לקוח",
+        phone: item.phone || "",
+        service: service.name || "",
+        notes: item.notes || "",
+        status: "booked",
+        source: "waitlist",
+        manageToken: generateManageToken(),
+        bookingCode: generateBookingCode(),
+        clientCanEdit: true,
+        clientEditCutoffMinutes: 120,
+        createdByUserId: item.customerId || null,
+      });
     });
 
     item.status = "accepted";
@@ -840,7 +903,7 @@ router.post("/:id/accept", async (req, res) => {
     return res.json(ok({ appointment, waitlist: item }));
   } catch (e) {
     console.error("POST /api/waitlist/:id/accept error:", e);
-    return res.status(500).json(fail(e.message));
+    return res.status(e.status || 500).json(fail(e.message));
   }
 });
 

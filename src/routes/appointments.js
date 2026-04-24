@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const Appointment = require("../models/Appointment");
 const Barber = require("../models/Barber");
 const Customer = require("../models/Customer");
+const BarberBookingLock = require("../models/BarberBookingLock");
 const { requireAuth, optionalAuth } = require("../middleware/auth");
 const { validateAppointmentAgainstSchedule } = require("../utils/schedule");
 const {
@@ -27,6 +28,86 @@ function generateManageToken() {
 
 function generateBookingCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function createHttpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withSingleBarberLock(barberId, work) {
+  const normalizedBarberId =
+    typeof barberId === "object" && barberId?._id
+      ? String(barberId._id)
+      : String(barberId || "");
+
+  if (!normalizedBarberId) {
+    throw createHttpError(400, "Barber is required");
+  }
+
+  const ownerToken = crypto.randomBytes(16).toString("hex");
+  const startedAt = Date.now();
+
+  while (true) {
+    try {
+      await BarberBookingLock.create({
+        barberId: normalizedBarberId,
+        ownerToken,
+        expiresAt: new Date(Date.now() + 15000),
+      });
+      break;
+    } catch (error) {
+      if (error?.code !== 11000) {
+        throw error;
+      }
+
+      await BarberBookingLock.deleteOne({
+        barberId: normalizedBarberId,
+        expiresAt: { $lte: new Date() },
+      });
+
+      if (Date.now() - startedAt > 5000) {
+        throw createHttpError(
+          409,
+          "מישהו בדיוק תופס את התור הזה עכשיו. נסה שוב בעוד רגע.",
+        );
+      }
+
+      await sleep(80);
+    }
+  }
+
+  try {
+    return await work();
+  } finally {
+    await BarberBookingLock.deleteOne({
+      barberId: normalizedBarberId,
+      ownerToken,
+    }).catch((error) =>
+      console.error("Failed to release barber booking lock:", error.message),
+    );
+  }
+}
+
+async function withBarberLocks(barberIds, work) {
+  const uniqueBarberIds = [
+    ...new Set(barberIds.map((id) => String(id || "")).filter(Boolean)),
+  ].sort();
+
+  const run = async (index) => {
+    if (index >= uniqueBarberIds.length) {
+      return work();
+    }
+
+    return withSingleBarberLock(uniqueBarberIds[index], () => run(index + 1));
+  };
+
+  return run(0);
 }
 
 function serializePublicAppointment(appointment) {
@@ -534,6 +615,7 @@ router.get("/", requireAuth, async (req, res) => {
 // POST /api/appointments
 router.post("/", optionalAuth, async (req, res) => {
   try {
+    const admin = isAdmin(req);
     const {
       barberId,
       startAt,
@@ -637,86 +719,90 @@ router.post("/", optionalAuth, async (req, res) => {
       endIso: e.toISOString(),
     });
 
-    const scheduleCheck = await validateBarberScheduleOrFail(
-      finalBarberId,
-      s,
-      e,
-    );
+    const appointment = await withBarberLocks([finalBarberId], async () => {
+      const scheduleCheck = await validateBarberScheduleOrFail(
+        finalBarberId,
+        s,
+        e,
+      );
 
-    console.log("scheduleCheck result:", scheduleCheck);
+      console.log("scheduleCheck result:", scheduleCheck);
 
-    if (!scheduleCheck.ok) {
-      return res
-        .status(scheduleCheck.status)
-        .json({ message: scheduleCheck.message });
-    }
+      if (!scheduleCheck.ok) {
+        throw createHttpError(scheduleCheck.status, scheduleCheck.message);
+      }
 
-    const overlap = await findOverlap({
-      barberId: finalBarberId,
-      startAt: s,
-      endAt: e,
-    });
+      if (!admin) {
+        const overlap = await findOverlap({
+          barberId: finalBarberId,
+          startAt: s,
+          endAt: e,
+        });
 
-    if (overlap) {
-      return res.status(409).json({ message: "Time already booked" });
-    }
+        if (overlap) {
+          throw createHttpError(409, "השעה הזו כבר נתפסה. בחר שעה אחרת.");
+        }
 
-    const ACTIVE_CUSTOMER_STATUSES = ["booked", "checked_in", "in_service"];
+        const ACTIVE_CUSTOMER_STATUSES = ["booked", "checked_in", "in_service"];
 
-    const existingActiveAppointmentQuery = {
-      status: { $in: ACTIVE_CUSTOMER_STATUSES },
-      startAt: { $gte: new Date() },
-      $or: [],
-    };
+        const existingActiveAppointmentQuery = {
+          status: { $in: ACTIVE_CUSTOMER_STATUSES },
+          startAt: { $gte: new Date() },
+          $or: [],
+        };
 
-    console.log("=== existingActiveAppointmentQuery ===");
-    console.log("ACTIVE_CUSTOMER_STATUSES:", ACTIVE_CUSTOMER_STATUSES);
-    console.log("query before $or fill:", existingActiveAppointmentQuery);
+        console.log("=== existingActiveAppointmentQuery ===");
+        console.log("ACTIVE_CUSTOMER_STATUSES:", ACTIVE_CUSTOMER_STATUSES);
+        console.log("query before $or fill:", existingActiveAppointmentQuery);
 
-    if (customerId) {
-      existingActiveAppointmentQuery.$or.push({ createdByUserId: customerId });
-    }
+        if (customerId) {
+          existingActiveAppointmentQuery.$or.push({
+            createdByUserId: customerId,
+          });
+        }
 
-    if (finalPhone) {
-      existingActiveAppointmentQuery.$or.push({ phone: finalPhone });
-    }
+        if (finalPhone) {
+          existingActiveAppointmentQuery.$or.push({ phone: finalPhone });
+        }
 
-    if (finalNormalizedPhone) {
-      existingActiveAppointmentQuery.$or.push({
+        if (finalNormalizedPhone) {
+          existingActiveAppointmentQuery.$or.push({
+            normalizedPhone: finalNormalizedPhone,
+          });
+        }
+
+        if (!existingActiveAppointmentQuery.$or.length) {
+          throw createHttpError(400, "Missing customer identity");
+        }
+
+        const existingActiveAppointment = await Appointment.findOne(
+          existingActiveAppointmentQuery,
+        ).lean();
+
+        if (existingActiveAppointment) {
+          throw createHttpError(
+            400,
+            "כבר קיים תור פעיל. אי אפשר לקבוע תור נוסף לפני סיום או ביטול התור הקיים.",
+          );
+        }
+      }
+
+      return Appointment.create({
+        barberId: finalBarberId,
+        startAt: s,
+        endAt: e,
+        customerName: finalCustomerName,
+        phone: finalPhone,
         normalizedPhone: finalNormalizedPhone,
+        service: finalService,
+        notes: notes ? String(notes).trim() : "",
+        status: "booked",
+        manageToken: generateManageToken(),
+        bookingCode: generateBookingCode(),
+        clientCanEdit: true,
+        clientEditCutoffMinutes: 180,
+        createdByUserId: req.user?._id || customerId || null,
       });
-    }
-
-    if (!existingActiveAppointmentQuery.$or.length) {
-      return res.status(400).json({ message: "Missing customer identity" });
-    }
-
-    const existingActiveAppointment = await Appointment.findOne(
-      existingActiveAppointmentQuery,
-    ).lean();
-
-    if (existingActiveAppointment) {
-      return res.status(400).json({
-        message:
-          "כבר קיים תור פעיל. אי אפשר לקבוע תור נוסף לפני סיום או ביטול התור הקיים.",
-      });
-    }
-
-    const appointment = await Appointment.create({
-      barberId: finalBarberId,
-      startAt: s,
-      endAt: e,
-      customerName: finalCustomerName,
-      phone: finalPhone,
-      normalizedPhone: finalNormalizedPhone,
-      service: finalService,
-      notes: notes ? String(notes).trim() : "",
-      status: "booked",
-      manageToken: generateManageToken(),
-      bookingCode: generateBookingCode(),
-      clientCanEdit: true,
-      clientEditCutoffMinutes: 180,
-      createdByUserId: req.user?._id || customerId || null,
     });
 
     await upsertCustomer({
@@ -739,7 +825,7 @@ router.post("/", optionalAuth, async (req, res) => {
     });
   } catch (e) {
     console.error("CREATE APPOINTMENT ERROR:", e);
-    res.status(500).json({ message: e.message });
+    res.status(e.status || 500).json({ message: e.message });
   }
 });
 
@@ -892,38 +978,38 @@ router.patch("/public/:token", async (req, res) => {
       return res.status(400).json({ message: "Invalid time range" });
     }
 
-    const scheduleCheck = await validateBarberScheduleOrFail(
-      nextBarberId,
-      nextStartAt,
-      nextEndAt,
-    );
-    if (!scheduleCheck.ok) {
-      return res
-        .status(scheduleCheck.status)
-        .json({ message: scheduleCheck.message });
-    }
+    await withBarberLocks([oldBarberId, nextBarberId], async () => {
+      const scheduleCheck = await validateBarberScheduleOrFail(
+        nextBarberId,
+        nextStartAt,
+        nextEndAt,
+      );
+      if (!scheduleCheck.ok) {
+        throw createHttpError(scheduleCheck.status, scheduleCheck.message);
+      }
 
-    const overlap = await findOverlap({
-      barberId: nextBarberId,
-      startAt: nextStartAt,
-      endAt: nextEndAt,
-      excludeId: appointment._id,
+      const overlap = await findOverlap({
+        barberId: nextBarberId,
+        startAt: nextStartAt,
+        endAt: nextEndAt,
+        excludeId: appointment._id,
+      });
+
+      if (overlap) {
+        throw createHttpError(409, "השעה הזו כבר נתפסה. בחר שעה אחרת.");
+      }
+
+      appointment.barberId = nextBarberId;
+      appointment.startAt = nextStartAt;
+      appointment.endAt = nextEndAt;
+      appointment.service = service ?? appointment.service;
+      appointment.notes = notes ?? appointment.notes;
+      appointment.customerName = customerName ?? appointment.customerName;
+      appointment.phone = phone ?? appointment.phone;
+      appointment.normalizedPhone = normalizeCustomerPhone(appointment.phone);
+
+      await appointment.save();
     });
-
-    if (overlap) {
-      return res.status(409).json({ message: "Time already booked" });
-    }
-
-    appointment.barberId = nextBarberId;
-    appointment.startAt = nextStartAt;
-    appointment.endAt = nextEndAt;
-    appointment.service = service ?? appointment.service;
-    appointment.notes = notes ?? appointment.notes;
-    appointment.customerName = customerName ?? appointment.customerName;
-    appointment.phone = phone ?? appointment.phone;
-    appointment.normalizedPhone = normalizeCustomerPhone(appointment.phone);
-
-    await appointment.save();
 
     if (appointment.phone) {
       await upsertCustomer({
@@ -954,7 +1040,9 @@ router.patch("/public/:token", async (req, res) => {
     });
   } catch (err) {
     console.error("PATCH PUBLIC APPOINTMENT ERROR:", err);
-    res.status(500).json({ message: "Failed to update appointment" });
+    res
+      .status(err.status || 500)
+      .json({ message: err.message || "Failed to update appointment" });
   }
 });
 
@@ -1018,31 +1106,32 @@ router.patch("/:id", requireAuth, async (req, res) => {
       return res.status(400).json({ message: "Invalid time range" });
     }
 
-    if (appt.status !== "cancelled") {
-      const scheduleCheck = await validateBarberScheduleOrFail(
-        appt.barberId,
-        appt.startAt,
-        appt.endAt,
-      );
-      if (!scheduleCheck.ok) {
-        return res
-          .status(scheduleCheck.status)
-          .json({ message: scheduleCheck.message });
+    await withBarberLocks([oldBarberId, appt.barberId], async () => {
+      if (appt.status !== "cancelled") {
+        const scheduleCheck = await validateBarberScheduleOrFail(
+          appt.barberId,
+          appt.startAt,
+          appt.endAt,
+        );
+        if (!scheduleCheck.ok) {
+          throw createHttpError(scheduleCheck.status, scheduleCheck.message);
+        }
+        if (!admin) {
+          const overlap = await findOverlap({
+            barberId: appt.barberId,
+            startAt: appt.startAt,
+            endAt: appt.endAt,
+            excludeId: appt._id,
+          });
+
+          if (overlap) {
+            throw createHttpError(409, "Time already booked");
+          }
+        }
       }
 
-      const overlap = await findOverlap({
-        barberId: appt.barberId,
-        startAt: appt.startAt,
-        endAt: appt.endAt,
-        excludeId: appt._id,
-      });
-
-      if (overlap) {
-        return res.status(409).json({ message: "Time already booked" });
-      }
-    }
-
-    await appt.save();
+      await appt.save();
+    });
 
     if (admin && appt.phone) {
       await upsertCustomer({
@@ -1067,7 +1156,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
 
     res.json(appt);
   } catch (e) {
-    res.status(500).json({ message: e.message });
+    res.status(e.status || 500).json({ message: e.message });
   }
 });
 
